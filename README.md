@@ -83,6 +83,38 @@ chmod 600 .env
 
 修改 `.env` 中的 `DATABASE_URL`、`SPLUNK_CONNECTIONS` 和模型配置，并同步修改 `config/settings.yaml` 中的环境和 index。`DATABASE_URL` 指向的数据库需要已经存在，表和索引由 Alembic 创建。
 
+PostgreSQL 数据库是在 PostgreSQL 实例中创建的，不是在项目目录中创建。应用账号已经存在时，由管理员执行：
+
+```bash
+createdb \
+  --host=数据库地址 \
+  --port=5432 \
+  --username=postgres \
+  --owner=应用账号 \
+  issue_troubleshooting
+```
+
+也可以登录 PostgreSQL 执行 SQL：
+
+```sql
+CREATE DATABASE issue_troubleshooting OWNER 应用账号;
+```
+
+如果应用账号也不存在，先由管理员创建账号：
+
+```sql
+CREATE ROLE issue_agent LOGIN PASSWORD '请替换为公司密钥';
+CREATE DATABASE issue_troubleshooting OWNER issue_agent;
+```
+
+然后把 `.env` 配置为实际地址：
+
+```dotenv
+DATABASE_URL=postgresql://issue_agent:密码@数据库地址:5432/issue_troubleshooting
+```
+
+公司环境通常不允许应用账号执行 `CREATE DATABASE`。这种情况下把数据库名、Owner 和编码要求交给 DBA 创建即可；应用账号只需要能够连接该数据库并创建、读写自己的表。数据库创建完成后执行 `npm run db:init`。
+
 3. 一条命令启动 Agent、浏览器 API 和前端：
 
 ```bash
