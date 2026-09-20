@@ -10,7 +10,8 @@ from test_workflow import make_service, request, run
 
 from troubleshooter.domain.models import ModelDiagnosis
 from troubleshooter.investigation.budget import RunBudget
-from troubleshooter.models.client import ModelClient, ModelUnavailable
+from troubleshooter.models import ModelCalls, ModelClient
+from troubleshooter.models.client import ModelUnavailable
 
 
 @pytest.mark.parametrize("limit", [0, 1, 3])
@@ -40,7 +41,7 @@ async def test_cancel_model_preserves_collected_facts(settings, config):
                 stopped.set()
 
     service = make_service(settings, config)
-    service.model_factory = lambda settings, budget: WaitingModel()
+    service.model_factory = lambda settings, budget: ModelCalls(settings, budget, WaitingModel())
     task = {"id": "cancel-model", "status": "running"}
     future = asyncio.create_task(service.run(task, request(), service.store.save))
     await entered.wait()
@@ -60,10 +61,14 @@ async def test_graph_handles_model_budget_without_losing_facts(settings, config)
     settings.model_mode = "live"
     settings.max_model_calls = 1
     service = make_service(settings, config)
-    service.model_factory = lambda settings, budget: ModelClient(
+    service.model_factory = lambda settings, budget: ModelCalls(
         settings,
         budget,
-        FakeMessagesListChatModel(responses=[AIMessage(content='{"proposals":[]}')]),
+        ModelClient(
+            settings,
+            budget,
+            FakeMessagesListChatModel(responses=[AIMessage(content='{"proposals":[]}')]),
+        ),
     )
     task = await run(service, request())
     assert task["status"] == "partial"
@@ -182,7 +187,7 @@ async def test_cancel_between_chunks_keeps_completed_model_analysis(settings, co
             await asyncio.sleep(100)
 
     service = make_service(settings, config, LargeSource())
-    service.model_factory = lambda settings, budget: PartialModel()
+    service.model_factory = lambda settings, budget: ModelCalls(settings, budget, PartialModel())
     task = {"id": "cancel-chunk", "status": "running"}
     future = asyncio.create_task(
         service.run(task, request(cleaning_enabled=False), service.store.save)
@@ -201,7 +206,9 @@ async def test_client_cleanup_failure_does_not_discard_report(settings, config):
             raise RuntimeError("provider connection details must stay private")
 
     service = make_service(settings, config)
-    service.model_factory = BrokenCleanup
+    service.model_factory = lambda settings, budget: ModelCalls(
+        settings, budget, BrokenCleanup(settings, budget)
+    )
     task = await run(service, request())
     assert task["status"] == "partial"
     assert task["report"]["findings"]

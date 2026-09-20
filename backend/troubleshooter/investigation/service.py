@@ -12,7 +12,7 @@ from langsmith import tracing_context
 from troubleshooter.config.settings import Settings
 from troubleshooter.domain.models import InvestigationRequest
 from troubleshooter.logs.sources import LogSource
-from troubleshooter.models.client import JsonModel, ModelClient
+from troubleshooter.models import ModelCallInterface, create_model_calls
 from troubleshooter.observability.logging import log_event, task_context
 from troubleshooter.persistence.postgres import Store
 from troubleshooter.reports.builder import build_report
@@ -26,7 +26,7 @@ from .graph import build_graph
 from .model_steps import ModelSteps
 from .state import initial_state
 
-ModelFactory = Callable[[Settings, RunBudget], JsonModel]
+ModelFactory = Callable[[Settings, RunBudget], ModelCallInterface]
 
 
 class InvestigationService:
@@ -37,7 +37,7 @@ class InvestigationService:
         registry: SkillRegistry,
         source: LogSource,
         store: Store,
-        model_factory: ModelFactory = ModelClient,
+        model_factory: ModelFactory = create_model_calls,
     ):
         self.settings, self.config, self.registry = settings, config, registry
         self.source, self.store, self.model_factory = source, store, model_factory
@@ -82,9 +82,7 @@ class InvestigationService:
             task.update(phase=message, usage=budget.usage.model_dump())
             progress(task)
 
-        graph = build_graph(
-            request, self.config, skills, self.settings, budget, collector, planner, models, phase
-        )
+        graph = build_graph(request, self.config, skills, budget, collector, planner, models, phase)
         # 业务预算控制实际查询次数；图递归上限额外防止错误连边造成死循环。
         recursion_limit = (
             30
@@ -130,10 +128,8 @@ class InvestigationService:
 
     async def _close_model(self, model, task, state):
         """清理失败不能覆盖已经完成的排查，也不能阻止报告入库。"""
-        if not isinstance(model, ModelClient):
-            return
         try:
-            await model.aclose()
+            await model.close()
         except Exception as exc:
             log_event("model.cleanup_failed", level=WARNING, error=exc)
             state["warnings"] += ["模型连接清理失败，已保留排查结果"]

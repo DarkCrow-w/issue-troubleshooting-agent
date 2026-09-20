@@ -14,6 +14,7 @@ from troubleshooter.domain.models import (
 )
 from troubleshooter.investigation.service import InvestigationService
 from troubleshooter.logs.sources import ReplaySource, build_spl
+from troubleshooter.models import ModelCalls
 from troubleshooter.persistence.postgres import Store
 from troubleshooter.skills import SkillRegistry
 
@@ -361,7 +362,7 @@ async def test_custom_skill_composition_and_evidence_expansion(settings, config)
             assert "business-error" in payload["prior_skill_artifacts"]
             return ModelDiagnosis(summary="need detail", evidence_requests=[event_id])
 
-    engine.model_factory = lambda settings, budget: FakeModel()
+    engine.model_factory = lambda settings, budget: ModelCalls(settings, budget, FakeModel())
     task = await run(engine, request())
     assert task["status"] == "completed"
     assert task["report"]["summary"] == "expanded conclusion"

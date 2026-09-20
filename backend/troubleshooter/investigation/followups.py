@@ -2,20 +2,14 @@
 
 from datetime import datetime, timedelta
 
-from pydantic import BaseModel, Field
-
 from troubleshooter.analysis import time_key
 from troubleshooter.domain.errors import ModelUnavailable
 from troubleshooter.domain.models import FollowupProposal, InvestigationRequest, QuerySpec
-from troubleshooter.models.client import JsonModel
+from troubleshooter.models import ModelCallInterface
 from troubleshooter.skills import Skill
 
 from .budget import RunBudget
 from .state import InvestigationState
-
-
-class Followups(BaseModel):
-    proposals: list[FollowupProposal] = Field(default_factory=list, max_length=3)
 
 
 def validate_proposal(
@@ -90,7 +84,7 @@ class FollowupPlanner:
         self,
         request: InvestigationRequest,
         skill: Skill | None,
-        model: JsonModel,
+        model: ModelCallInterface,
         budget: RunBudget,
     ):
         self.request, self.skill, self.model, self.budget = request, skill, model, budget
@@ -100,11 +94,7 @@ class FollowupPlanner:
             return {"next_query": None}
         warnings = list(state["warnings"])
         proposals = list(state["proposals"])
-        if (
-            not state["model_planned"]
-            and state["events"]
-            and self.budget.settings.model_mode != "offline"
-        ):
+        if not state["model_planned"] and state["events"] and self.model.enabled:
             compact = [
                 {
                     "event_id": e.id,
@@ -115,13 +105,13 @@ class FollowupPlanner:
                 for e in list(state["events"].values())[:30]
             ]
             try:
-                result = await self.model.generate(
+                model_proposals = await self.model.propose_followups(
                     self.skill.prompt,
-                    {"events": compact, "already_searched": sorted(state["searched"])},
-                    Followups,
+                    compact,
+                    state["searched"],
                     set(state["events"]),
                 )
-                proposals.extend(result.proposals)
+                proposals.extend(model_proposals)
             except ModelUnavailable as exc:
                 warnings.append(str(exc))
         # 模型建议校验不通过时，规则候选仍可执行；两者使用同一套预算和去重状态。

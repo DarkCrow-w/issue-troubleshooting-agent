@@ -6,10 +6,10 @@
 
 1. `backend/troubleshooter/bootstrap.py`：创建依赖。只在这里选择 Splunk 或 Replay 数据源。
 2. `api/agent.py` → `investigation/tasks.py`：接收请求，排队，启动或取消任务。
-3. `investigation/service.py`：为每笔交易创建独立状态、预算和模型客户端，执行图并保存结果。
+3. `investigation/service.py`：为每笔交易创建独立状态与预算，执行图并保存结果。
 4. `investigation/graph.py`：查看完整执行顺序与循环条件。
 5. `investigation/evidence.py`、`followups.py`、`model_steps.py`：各阶段的业务实现。
-6. `models/client.py`：模型调用、输出解析、有限修复与实际用量统计。
+6. `models/calls.py`：业务模型调用的稳定 interface；`models/client.py`：供应商 adapter、输出解析、有限修复与实际用量统计。
 
 前端从 `frontend/src/app/App.tsx` 阅读：它负责布局和组合组件。表单输入在 `InvestigationForm`，任务生命周期在 `useInvestigation`，证据读取及过期请求保护在 `useEvidence`。
 
@@ -37,6 +37,7 @@ flowchart TD
 
 ## 模型与 skill 的边界
 
+- `models/calls.py` 是业务层唯一的模型调用 seam，提供 `propose_followups`、`analyze_evidence_chunk`、`analyze_expanded_evidence` 和 `synthesize_report`。流程代码不组装供应商 payload，也不直接调用通用 `generate()`。
 - `ChatPromptTemplate` 将系统规则、可信 skill 提示词与不可信日志材料分开。
 - `init_chat_model` 创建 OpenAI 兼容模型客户端，支持现有 `LLM_BASE_URL` 和 `LLM_MODEL` 配置。
 - `PydanticOutputParser` 验证 JSON 结构，再校验证据 ID；最多修复一次。这是应用层验证，不依赖供应商支持原生结构化输出或 tool calling。
@@ -49,7 +50,8 @@ flowchart TD
 
 | 方式 | 使用位置 | 解决的问题 |
 | --- | --- | --- |
-| 适配器 | `LogSource`、`JsonModel` | 替换数据源/模型不影响排查规则 |
+| 深模块 | `ModelCallInterface` | 用四个命名方法隐藏 SDK、payload、schema、重试和 usage 细节 |
+| 适配器 | `LogSource`、`ModelClient` | 替换数据源/模型供应商不影响排查规则 |
 | 策略注册表 | `analysis.HANDLERS`、`SkillRegistry` | 通过配置选择可信处理器并校验依赖 |
 | 依赖注入 | `bootstrap.py`、服务构造函数 | 将组装和执行分开，测试可替换外部依赖 |
 | 显式状态图 | `investigation/graph.py` | 查询循环、分块循环和终止条件一处可见 |
@@ -63,6 +65,7 @@ flowchart TD
 - 新确定性规则：在 `analysis/` 新建业务模块，在 `analysis/__init__.py` 的 `HANDLERS` 注册。
 - 新补查条件：修改 `investigation/followups.py`，保持请求范围与预算校验。
 - 新数据源：实现 `logs/sources/base.py` 的 `LogSource` 契约，在 `bootstrap.py` 组装。
+- 新模型供应商或公司内部网关：只修改 `models/client.py`；业务输入协议变化时修改 `models/calls.py`，不要在 `investigation/` 中增加模型 SDK 调用。
 - 新执行阶段：添加返回状态更新的节点，再修改 `graph.py` 的边；不要在 HTTP 路由里编排流程。
 
 ## 升级运行

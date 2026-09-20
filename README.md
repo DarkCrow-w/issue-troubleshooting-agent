@@ -90,7 +90,7 @@ backend/troubleshooter/
   bootstrap.py     组装配置、数据源、存储与排查服务
   api/             public.py 网页 API；agent.py 内部 API
   investigation/   LangGraph 流程、任务调度、预算、补查、分块分析
-  models/          LangChain 模型适配、提示词模板、输出引用校验
+  models/          所有模型调用方法、LangChain 适配、提示词与输出校验
   logs/            标准化、可选清洗；sources/ 内含 Splunk 与回放
   analysis/        请求响应、Java 异常、调用链、失败信号规则
   skills/          manifest、注册表、依赖校验、可信处理器执行
@@ -111,6 +111,8 @@ examples/          合成日志
 ```
 
 LangGraph 的 `StateGraph` 明确控制查询、代码 skills、补查循环、分块分析及报告节点。LangChain 负责统一模型调用、提示词模板和 Pydantic 输出解析。沿用独立的业务函数与数据类型，规则提取事实，模型综合解释；模型不能直接执行 SPL、访问任意网络或运行 shell。
+
+所有模型调用集中在 `backend/troubleshooter/models/`：`calls.py` 对业务层提供补查建议、证据分块分析、完整证据分析和报告综合四个独立方法；`client.py` 是唯一接触模型 SDK、HTTP 兼容协议、重试、token usage 和结构化解析的位置。接入公司内部模型时，通常只需要修改 `client.py`；输入协议也不同时再调整 `calls.py`。`investigation/` 中不直接调用 LangChain 或通用 `generate()`。
 
 使用少量直接解决问题的设计：数据源/模型适配器、可信 skill 策略注册表、构造函数依赖注入，以及显式状态图。没有增加通用插件容器或多层继承。入口与阅读顺序见 [架构与扩展说明](docs/architecture.md)。Python 使用 Ruff，前端使用 Prettier 格式化。
 
