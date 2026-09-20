@@ -1,0 +1,11 @@
+{
+  "id": "request-response",
+  "version": "1.0.0",
+  "description": "提取请求和响应",
+  "kind": "code",
+  "depends_on": [],
+  "handler": "request_response",
+  "tools": [],
+  "input": "events-and-artifacts",
+  "output": "artifact"
+}

@@ -1,0 +1,141 @@
+[
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "gateway-01",
+      "appName": "cm-gateway",
+      "_time": "2026-07-28T16:51:47.800+08:00",
+      "eventType": "request",
+      "direction": "inbound",
+      "serviceId": "/transfers",
+      "callId": "gateway-call",
+      "reqMessage": "{\"sysHead\": {\"seqNo\": \"demo-transaction-001\"}, \"accountNumber\": \"1234567890\", \"amount\": 100}",
+      "message": "Request received",
+      "headers": {
+        "authorization": "Bearer demo-secret-never-real"
+      }
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "gateway-01",
+      "appName": "cm-gateway",
+      "_time": "2026-07-28T16:51:47.810+08:00",
+      "eventType": "request",
+      "direction": "outbound",
+      "serviceId": "/acct/scene/1000/10612030",
+      "callId": "gateway-client",
+      "parentCallId": "gateway-call",
+      "peerService": "cm-acct-scene",
+      "seqNo": "demo-transaction-001:BUS-001",
+      "message": "Calling account service"
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "account-01",
+      "appName": "cm-acct-scene",
+      "_time": "2026-07-28T16:51:47.815+08:00",
+      "eventType": "request",
+      "direction": "inbound",
+      "serviceId": "/acct/scene/1000/10612030",
+      "callId": "account-call",
+      "parentCallId": "gateway-client",
+      "reqMessage": "{\"operation\":\"reserve\"}",
+      "message": "Request accepted"
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "account-01",
+      "appName": "cm-acct-scene",
+      "_time": "2026-07-28T16:51:48.010+08:00",
+      "eventType": "exception",
+      "serviceId": "/acct/scene/1000/10612030",
+      "callId": "account-call",
+      "level": "ERROR",
+      "message": "Account reservation failed",
+      "stacktrace": "com.example.ReservationException: Unable to reserve account\n\tat com.example.AccountService.reserve(AccountService.java:42)\nCaused by: java.sql.SQLTimeoutException: Database query timed out\n\tat com.example.Repository.find(Repository.java:81)"
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "account-01",
+      "appName": "cm-acct-scene",
+      "_time": "2026-07-28T16:51:48.020+08:00",
+      "eventType": "response",
+      "direction": "inbound",
+      "serviceId": "/acct/scene/1000/10612030",
+      "callId": "account-call",
+      "httpStatus": 200,
+      "response": {
+        "code": "ACCT_TIMEOUT",
+        "message": "Account query timed out"
+      }
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "gateway-01",
+      "appName": "cm-gateway",
+      "_time": "2026-07-28T16:51:48.030+08:00",
+      "eventType": "response",
+      "direction": "outbound",
+      "callId": "gateway-client",
+      "serviceId": "/acct/scene/1000/10612030",
+      "httpStatus": 200,
+      "response": {
+        "code": "ACCT_TIMEOUT",
+        "message": "Account query timed out"
+      }
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "demo-transaction-001",
+      "pod": "gateway-01",
+      "appName": "cm-gateway",
+      "_time": "2026-07-28T16:51:48.040+08:00",
+      "eventType": "response",
+      "direction": "inbound",
+      "callId": "gateway-call",
+      "serviceId": "/transfers",
+      "httpStatus": 502,
+      "response": {
+        "code": "UPSTREAM_FAILURE",
+        "message": "Transaction failed"
+      }
+    }
+  },
+  {
+    "preview": false,
+    "result": {
+      "index": "demo_transactions",
+      "correlationId": "another-transaction",
+      "pod": "account-01",
+      "appName": "cm-acct-scene",
+      "_time": "2026-07-28T16:51:47.900+08:00",
+      "eventType": "log",
+      "message": "Different transaction; must not establish transaction causality"
+    }
+  }
+]

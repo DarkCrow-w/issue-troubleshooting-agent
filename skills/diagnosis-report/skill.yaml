@@ -1,0 +1,15 @@
+{
+  "id": "diagnosis-report",
+  "version": "1.0.0",
+  "description": "生成证据化诊断报告",
+  "kind": "report",
+  "depends_on": [
+    "failure-localization"
+  ],
+  "handler": "",
+  "tools": [
+    "read_evidence"
+  ],
+  "input": "events-and-artifacts",
+  "output": "artifact"
+}

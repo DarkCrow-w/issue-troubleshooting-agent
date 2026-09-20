@@ -1,0 +1,11 @@
+{
+  "id": "exception-analysis",
+  "version": "1.0.0",
+  "description": "分析 Java 异常链",
+  "kind": "code",
+  "depends_on": [],
+  "handler": "exception_analysis",
+  "tools": [],
+  "input": "events-and-artifacts",
+  "output": "artifact"
+}

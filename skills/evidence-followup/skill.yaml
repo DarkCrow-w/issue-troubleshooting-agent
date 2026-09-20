@@ -1,0 +1,15 @@
+{
+  "id": "evidence-followup",
+  "version": "1.0.0",
+  "description": "根据缺失证据补查",
+  "kind": "followup",
+  "depends_on": [
+    "failure-localization"
+  ],
+  "handler": "",
+  "tools": [
+    "propose_followup"
+  ],
+  "input": "events-and-artifacts",
+  "output": "artifact"
+}

@@ -1,0 +1,29 @@
+environments:
+  demo:
+    indexes: [demo_transactions]
+  # Configure company environments explicitly before enabling live mode.
+  # production:
+  #   indexes: [your_application_index]
+correlation_fields:
+  - correlationId
+  - seqNo
+  - x_hsbc_request_correlation_id
+composite_id_services: [cm-gateway, cm-acct-scene, cm-acct-sence, comet-gateway-service]
+service_aliases: {}
+success_business_codes: ['0', '0000', 'SUCCESS']
+cleaning:
+  body_max_chars: 16000
+  head_chars: 3000
+  tail_chars: 4000
+  signal_window_chars: 1500
+  max_signal_windows: 6
+  selected_field_max_chars: 2000
+  stack_max_frames: 80
+  keep_body_fields: [seqNo, correlationId, systemHeader, sysHead, code, message, error, errorCode, returnCode]
+workflows:
+  standard:
+    description: 完整交易链路与故障排查
+    skills: [request-response, exception-analysis, trace-reconstruction, failure-localization, evidence-followup, diagnosis-report]
+  exceptions:
+    description: 聚焦异常与失败原因
+    skills: [request-response, exception-analysis, trace-reconstruction, failure-localization, diagnosis-report]

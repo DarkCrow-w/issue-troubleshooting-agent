@@ -1,0 +1,14 @@
+{
+  "id": "failure-localization",
+  "version": "1.0.0",
+  "description": "定位失败步骤",
+  "kind": "code",
+  "depends_on": [
+    "trace-reconstruction",
+    "exception-analysis"
+  ],
+  "handler": "failure_localization",
+  "tools": [],
+  "input": "events-and-artifacts",
+  "output": "artifact"
+}
