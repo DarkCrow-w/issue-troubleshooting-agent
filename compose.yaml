@@ -1,4 +1,12 @@
 services:
+  migrate:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    env_file:
+      - path: .env
+        required: true
+    command: [alembic, upgrade, head]
   agent:
     build:
       context: .
@@ -7,6 +15,9 @@ services:
       - path: .env
         required: true
     expose: ["8001"]
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
   api:
     build:
       context: .

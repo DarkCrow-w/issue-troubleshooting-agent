@@ -5,12 +5,14 @@
   "type": "module",
   "scripts": {
     "postinstall": "python3 -m venv .venv && .venv/bin/python -m pip install -c backend/requirements.lock -e backend",
-    "dev": "concurrently --kill-others-on-fail --names agent,api,web \"npm:dev:agent\" \"npm:dev:api\" \"npm:dev:frontend\"",
+    "dev": "npm run db:init && concurrently --kill-others-on-fail --names agent,api,web \"npm:dev:agent\" \"npm:dev:api\" \"npm:dev:frontend\"",
     "start": "npm run dev",
     "dev:frontend": "vite frontend --config frontend/vite.config.ts --host 127.0.0.1 --port 5173",
-    "dev:backend": "concurrently --kill-others-on-fail --names agent,api \"npm:dev:agent\" \"npm:dev:api\"",
+    "dev:backend": "npm run db:init && concurrently --kill-others-on-fail --names agent,api \"npm:dev:agent\" \"npm:dev:api\"",
     "dev:agent": ".venv/bin/python -m uvicorn troubleshooter.api.agent:create_app --factory --app-dir backend --host 127.0.0.1 --port 8001",
     "dev:api": ".venv/bin/python -m uvicorn troubleshooter.api.public:create_app --factory --app-dir backend --host 127.0.0.1 --port 8000",
+    "db:init": ".venv/bin/alembic upgrade head",
+    "db:status": ".venv/bin/alembic current",
     "build": "tsc -b frontend/tsconfig.json && vite build frontend --config frontend/vite.config.ts"
   },
   "dependencies": {

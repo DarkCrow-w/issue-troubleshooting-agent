@@ -11,23 +11,6 @@ class Store:
         if not database_url:
             raise ValueError("请在 .env 中配置 DATABASE_URL（PostgreSQL）")
         self.database_url = database_url
-        with self.connect() as db:
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS tasks (
-                    id TEXT PRIMARY KEY,
-                    updated TIMESTAMPTZ NOT NULL,
-                    payload JSONB NOT NULL
-                )
-            """)
-            db.execute("""
-                CREATE TABLE IF NOT EXISTS evidence (
-                    task_id TEXT NOT NULL REFERENCES tasks(id) ON DELETE CASCADE,
-                    event_id TEXT NOT NULL,
-                    payload JSONB NOT NULL,
-                    PRIMARY KEY (task_id, event_id)
-                )
-            """)
-            db.execute("CREATE INDEX IF NOT EXISTS tasks_updated_idx ON tasks(updated)")
 
     def connect(self):
         # Context manager commits on success, rolls back on failure and closes the connection.

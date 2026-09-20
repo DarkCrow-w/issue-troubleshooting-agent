@@ -7,7 +7,7 @@ name = "issue-troubleshooting"
 version = "0.2.0"
 description = "Internal evidence-based transaction investigation agent"
 requires-python = ">=3.11"
-dependencies = ["fastapi>=0.115,<1", "uvicorn>=0.34,<1", "httpx>=0.28,<1", "pydantic-settings>=2.7,<3", "PyYAML>=6,<7", "langchain>=1,<2", "langchain-openai>=1,<2", "langgraph>=1,<2", "psycopg[binary]>=3.2,<4"]
+dependencies = ["alembic>=1.14,<2", "fastapi>=0.115,<1", "uvicorn>=0.34,<1", "httpx>=0.28,<1", "pydantic-settings>=2.7,<3", "PyYAML>=6,<7", "langchain>=1,<2", "langchain-openai>=1,<2", "langgraph>=1,<2", "psycopg[binary]>=3.2,<4", "SQLAlchemy>=2,<3"]
 
 [tool.setuptools.packages.find]
 where = ["."]

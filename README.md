@@ -2,7 +2,7 @@
 
 面向公司内网的交易日志问题定位系统。前端提交关联 ID 或 Splunk SPL；后端查询 Splunk、清洗大日志、还原服务调用链，并通过 LangGraph、可组合 skills 和内部大模型生成带原始证据引用的排查报告。
 
-这个分支只保留生产运行需要的前后端代码和配置，不包含 Demo 日志、测试、截图、流程图或开发期迁移工具。系统固定使用 Splunk、PostgreSQL 和在线模型。
+这个分支只保留生产运行需要的前后端代码和配置，不包含 Demo 日志、测试、截图或流程图。系统固定使用 Splunk、PostgreSQL 和在线模型。
 
 ## 目录
 
@@ -18,6 +18,7 @@ backend/troubleshooter/
 frontend/src/      React 极简排查页面
 skills/            可组合的排查 skills
 config/            环境、index、字段和 workflow 配置
+alembic/           PostgreSQL 版本化迁移
 ```
 
 ## 内网接入
@@ -57,7 +58,7 @@ environments:
 docker compose up -d --build
 ```
 
-访问 <http://127.0.0.1:8080/>。PostgreSQL 中的 `tasks`、`evidence` 表和索引会在首次启动时自动创建。
+访问 <http://127.0.0.1:8080/>。Compose 会先运行一次 `alembic upgrade head`，成功创建或升级 PostgreSQL 表之后才启动 Agent。
 
 如果 PostgreSQL 运行在 Docker 宿主机，macOS/Windows 可在 `DATABASE_URL` 中使用 `host.docker.internal`；Linux 应使用容器可访问的宿主机地址或把 PostgreSQL 放入同一 Docker network。
 
@@ -80,7 +81,7 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-修改 `.env` 中的 `DATABASE_URL`、`SPLUNK_CONNECTIONS` 和模型配置，并同步修改 `config/settings.yaml` 中的环境和 index。
+修改 `.env` 中的 `DATABASE_URL`、`SPLUNK_CONNECTIONS` 和模型配置，并同步修改 `config/settings.yaml` 中的环境和 index。`DATABASE_URL` 指向的数据库需要已经存在，表和索引由 Alembic 创建。
 
 3. 一条命令启动 Agent、浏览器 API 和前端：
 
@@ -88,7 +89,7 @@ chmod 600 .env
 npm run dev
 ```
 
-浏览器访问 <http://127.0.0.1:5173/>。按一次 `Ctrl+C` 会同时停止三个进程。
+该命令会先执行数据库初始化，再启动全部进程。浏览器访问 <http://127.0.0.1:5173/>。按一次 `Ctrl+C` 会同时停止三个进程。
 
 需要分别开发或启停时，使用以下命令：
 
@@ -98,6 +99,15 @@ npm run dev:backend   # 启动 Agent :8001 和 Browser API :8000
 npm run dev:agent     # 只启动 Agent
 npm run dev:api       # 只启动 Browser API
 ```
+
+`npm run dev:backend` 也会先初始化数据库。只启动 Agent 前，可以手动执行：
+
+```bash
+npm run db:init       # 升级到最新数据库版本，可重复执行
+npm run db:status     # 查看当前数据库版本
+```
+
+日常只执行向前升级。`alembic downgrade` 会删除或改变数据库结构，执行前必须确认迁移内容并完成数据库备份。
 
 前后端分开运行时，可以开两个终端：
 
