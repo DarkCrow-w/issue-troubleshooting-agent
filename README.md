@@ -61,6 +61,68 @@ docker compose up -d --build
 
 如果 PostgreSQL 运行在 Docker 宿主机，macOS/Windows 可在 `DATABASE_URL` 中使用 `host.docker.internal`；Linux 应使用容器可访问的宿主机地址或把 PostgreSQL 放入同一 Docker network。
 
+## 不使用 Docker 本地启动
+
+本地运行需要 Python 3.11 以上、Node.js 22 和一个可以连接的 PostgreSQL。所有命令都从项目根目录开始执行。
+
+1. 首次安装后端依赖：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python -m pip install -c backend/requirements.lock -e backend
+```
+
+如果公司网络不能访问公开软件源，请把 pip 和 npm 配置为公司的制品仓库后再安装。
+
+2. 首次准备配置：
+
+```bash
+cp .env.example .env
+chmod 600 .env
+```
+
+把 `.env` 中的 `DATABASE_URL`、`SPLUNK_CONNECTIONS` 和模型配置替换为公司环境的真实值，并同步修改 `config/settings.yaml` 中的环境和 index。已有 `.env` 时不要再次复制覆盖。
+
+3. 在第一个终端启动 Agent Service：
+
+```bash
+source .venv/bin/activate
+uvicorn troubleshooter.api.agent:create_app \
+  --factory --app-dir backend --host 127.0.0.1 --port 8001
+```
+
+Agent Service 负责 Splunk 查询、LangGraph 排查流程、模型调用和 PostgreSQL 读写。
+
+4. 在第二个终端启动浏览器 API：
+
+```bash
+source .venv/bin/activate
+uvicorn troubleshooter.api.public:create_app \
+  --factory --app-dir backend --host 127.0.0.1 --port 8000
+```
+
+本地模式下 `AGENT_URL` 默认是 `http://127.0.0.1:8001`，通常不需要额外配置。
+
+5. 在第三个终端启动前端：
+
+```bash
+cd frontend
+npm ci
+npm run dev
+```
+
+浏览器访问 <http://127.0.0.1:5173/>。`npm ci` 只需在首次安装或依赖变化后运行，之后执行 `npm run dev` 即可。
+
+可以用下面两个地址检查后端是否启动成功：
+
+```bash
+curl http://127.0.0.1:8001/health
+curl http://127.0.0.1:8000/health
+```
+
+两个接口都返回 `status: ok` 后，再打开前端。停止系统时，在三个终端中分别按 `Ctrl+C`。
+
 ## 必需环境变量
 
 | 变量 | 用途 |
