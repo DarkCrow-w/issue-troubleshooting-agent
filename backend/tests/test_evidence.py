@@ -183,6 +183,26 @@ def test_large_raw_finds_tail_exception_without_unbounded_regex(config):
     assert event.exception["type"] == "java.net.SocketTimeoutException"
 
 
+def test_single_line_multi_megabyte_exception_is_compacted(config):
+    message = (
+        "a" * 1_000_000
+        + " Caused by: java.net.SocketTimeoutException: downstream read timed out "
+        + "b" * 1_000_000
+        + ' "returnCode":"DOCUMENT_TIMEOUT" '
+        + "c" * 1_000_000
+    )
+    event = normalize(record(message=message), config)
+    cleaned = clean_event(event, config["cleaning"])
+
+    stack = cleaned["exception"]["stack"]
+    assert cleaned["exception"]["stack_truncated"] is True
+    assert len(stack) < 20_000
+    assert "SocketTimeoutException" in stack
+    assert "DOCUMENT_TIMEOUT" in stack
+    assert len(cleaned["exception"]["message"]) < 5_000
+    assert cleaned["message"] == {"same_content_as": "exception.stack"}
+
+
 def test_deduplication_references_the_correct_payload_field(config):
     rows = [
         record(eventType="request", request={"same": "body"}),

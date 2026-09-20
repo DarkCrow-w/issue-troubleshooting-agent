@@ -11,7 +11,7 @@ services:
       DATA_DIR: /app/data
       CONFIG_PATH: /app/config/settings.yaml
       SKILLS_DIR: /app/skills
-      REPLAY_PATH: /app/examples/transaction.json
+      REPLAY_PATH: ${REPLAY_PATH:-/app/examples/demo-pack.json}
     volumes:
       - investigations:/app/data
       - ./config:/app/config:ro

@@ -18,9 +18,11 @@
 - API Service：<http://127.0.0.1:8000/docs>
 - Agent Service：<http://127.0.0.1:8001/docs>（业务接口需要服务令牌）
 
-页面预填演示 ID `demo-transaction-001`、环境 `demo` 和 UTC+08:00 时间 `2026-07-28 16:50–16:55`。直接点击“开始排查”。样例包含账户服务的 SQL 超时、HTTP 200 下的业务失败、网关 502，以及一条不属于本交易的上下文日志。
+页面预填演示 ID `demo-java-timeout-001`、环境 `demo` 和 UTC+08:00 时间 `2026-07-28 16:50–16:55`。直接点击“开始排查”即可看到 Java 异常、下游超时和上游 502 的传播过程。
 
-另有成功样例 `examples/success.json`，设置 `REPLAY_PATH` 为该文件绝对路径并查询 `demo-success-001`，时间和环境同上。
+Docker 默认加载包含六笔交易的 `examples/demo-pack.json`。可直接使用成功、业务失败、Java 超时、重试、四服务链路和 3 MB 大日志案例，完整 ID 与预期结果见 [Demo 清单](examples/DEMO.md)。
+
+原有的单交易 `examples/transaction.json` 和 `examples/success.json` 仍可单独配置为 `REPLAY_PATH`。
 
 离线模式输出确定性事实和未知信息，不冒充模型根因分析。网页可查看调用实例、明确/推测调用边、时间线、原始日志，导出 Markdown/JSON。数据默认保留 24 小时，定时清理；Agent 重启时将未完成任务标记为中断。
 
@@ -184,7 +186,7 @@ output: evidence-claims
 
 ```json
 {
-  "correlation_id": "demo-transaction-001",
+  "correlation_id": "demo-java-timeout-001",
   "environment": "demo",
   "start_time": "2026-07-28T16:50:00+08:00",
   "end_time": "2026-07-28T16:55:00+08:00",
@@ -229,7 +231,7 @@ docker compose logs --no-log-prefix agent | rg '你的任务ID'
 
 ```bash
 .venv/bin/ruff check backend
-.venv/bin/pytest backend/tests -q
+(cd backend && ../.venv/bin/pytest -q)
 npm run build --prefix frontend
 
 # 在 ./scripts/dev.sh 已运行、且使用离线演示模式时：

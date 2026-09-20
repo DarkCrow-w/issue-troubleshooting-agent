@@ -10,6 +10,20 @@ from troubleshooter.domain.models import Event
 
 EXCEPTION_CLASS = re.compile(r"\b[A-Z][A-Za-z0-9_$]{0,100}(?:Exception|Error)\b")
 HTTP_STATUS = re.compile(r"^\s*(\d{3})(?:\s|$)")
+MAX_EXCEPTION_MESSAGE_CHARS = 4_000
+
+
+def compact_exception_message(message: str) -> str:
+    """限制派生异常摘要的长度；完整异常仍保存在原始日志和 stack 字段中。"""
+
+    if len(message) <= MAX_EXCEPTION_MESSAGE_CHARS:
+        return message
+
+    tail_chars = 1_000
+    head_chars = MAX_EXCEPTION_MESSAGE_CHARS - tail_chars
+    omitted_chars = len(message) - MAX_EXCEPTION_MESSAGE_CHARS
+    omission = f" ... 省略 {omitted_chars} 字符 ... "
+    return message[:head_chars] + omission + message[-tail_chars:]
 
 
 def decode_payload(value: Any, warnings: list[str]) -> Any:
@@ -96,6 +110,7 @@ def extract_exceptions(text: str) -> list[tuple[str, str]]:
             if message_end < 0:
                 message_end = len(text)
             message = text[message_start:message_end].strip()
+            message = compact_exception_message(message)
         output.append((text[start : match.end()], message))
     return output
 

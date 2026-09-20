@@ -134,31 +134,41 @@ def _compact_body(body: Any, event_id: str, config: dict) -> Any:
 def _compact_stack(stack: str, config: dict) -> tuple[str, bool]:
     lines = stack.splitlines()
     maximum = config["stack_max_frames"]
-    if len(lines) <= maximum:
-        return stack, False
-
-    # 首尾负责上下文；Caused by 和异常标题附近负责保留真正的异常链。
-    keep = set(range(min(20, maximum, len(lines))))
-    tail_count = min(10, max(0, maximum - len(keep)))
-    keep.update(range(max(0, len(lines) - tail_count), len(lines)))
-    for index, line in enumerate(lines):
-        if not ERROR_SIGNAL.search(line):
-            continue
-        for nearby in range(max(0, index - 1), min(len(lines), index + 6)):
+    truncated = len(lines) > maximum
+    compacted = stack
+    if truncated:
+        # 首尾负责上下文；Caused by 和异常标题附近负责保留真正的异常链。
+        keep = set(range(min(20, maximum, len(lines))))
+        tail_count = min(10, max(0, maximum - len(keep)))
+        keep.update(range(max(0, len(lines) - tail_count), len(lines)))
+        for index, line in enumerate(lines):
+            if not ERROR_SIGNAL.search(line):
+                continue
+            for nearby in range(max(0, index - 1), min(len(lines), index + 6)):
+                if len(keep) >= maximum:
+                    break
+                keep.add(nearby)
             if len(keep) >= maximum:
                 break
-            keep.add(nearby)
-        if len(keep) >= maximum:
-            break
 
-    output = []
-    previous = -1
-    for index in sorted(keep):
-        if previous >= 0 and index > previous + 1:
-            output.append(f"... 省略 {index - previous - 1} 行 ...")
-        output.append(lines[index])
-        previous = index
-    return "\n".join(output), True
+        output = []
+        previous = -1
+        for index in sorted(keep):
+            if previous >= 0 and index > previous + 1:
+                output.append(f"... 省略 {index - previous - 1} 行 ...")
+            output.append(lines[index])
+            previous = index
+        compacted = "\n".join(output)
+
+    # 有些 logger 把完整异常写成单行；行数限制对这种数 MB 文本不起作用。
+    if len(compacted) > config["body_max_chars"]:
+        excerpts = _text_excerpts(compacted, config)
+        compacted = "\n".join(
+            f"[字符 {item['start']}..{item['end']} · {item['kind']}]\n{item['text']}"
+            for item in excerpts
+        )
+        truncated = True
+    return compacted, truncated
 
 
 def clean_event(event: Event, config: dict) -> dict:
