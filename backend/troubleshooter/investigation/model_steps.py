@@ -17,7 +17,6 @@ class ModelSteps:
     ):
         self.skills = [s for s in skills if s.kind in ("llm", "report")]
         self.model = model
-        self.enabled = model.enabled
         self.question = request.question
 
     async def analyse_chunk(self, state: InvestigationState) -> dict:

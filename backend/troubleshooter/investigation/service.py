@@ -48,8 +48,8 @@ class InvestigationService:
         with task_context(task["id"]):
             log_event(
                 "task.started",
-                source_mode=self.settings.source_mode,
-                model_mode=self.settings.model_mode,
+                source_mode="splunk",
+                model_mode="live",
             )
             try:
                 await self._run(task, request, progress)
@@ -158,7 +158,7 @@ class InvestigationService:
             "config": self.config,
             "skills": [{"id": s.id, "version": s.version, "digest": s.digest} for s in skills],
             "model": self.settings.llm_model,
-            "model_mode": self.settings.model_mode,
-            "source_mode": self.settings.source_mode,
+            "model_mode": "live",
+            "source_mode": "splunk",
             "runtime": "langgraph",
         }

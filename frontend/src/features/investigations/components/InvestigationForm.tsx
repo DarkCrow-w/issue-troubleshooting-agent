@@ -13,12 +13,12 @@ interface Props {
 }
 
 export default function InvestigationForm({ config, busy, onSubmit }: Props) {
-  const [correlationId, setCorrelationId] = useState("demo-java-timeout-001");
+  const [correlationId, setCorrelationId] = useState("");
   const [settings, setSettings] = useState<SearchSettings>({
-    environment: "demo",
+    environment: "",
     workflow: "standard",
-    startTime: "2026-07-28T16:50",
-    endTime: "2026-07-28T16:55",
+    startTime: "",
+    endTime: "",
     spl: "",
     cleaning: true,
   });

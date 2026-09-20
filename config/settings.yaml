@@ -1,9 +1,6 @@
 environments:
-  demo:
-    indexes: [demo_transactions]
-  # Configure company environments explicitly before enabling live mode.
-  # production:
-  #   indexes: [your_application_index]
+  production:
+    indexes: [replace_with_company_index]
 correlation_fields:
   - correlationId
   - seqNo

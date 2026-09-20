@@ -37,13 +37,9 @@ class ModelClient:
         self._owns_model = model is None
 
     def _get_model(self) -> BaseChatModel:
-        if self.settings.model_mode == "offline":
-            raise ModelUnavailable("离线模式：未调用模型，仅输出规则提取的事实")
         if self._model is not None:
             return self._model
-        if not self.settings.llm_api_key:
-            raise ModelUnavailable("未配置模型密钥")
-        # 客户端延迟创建；规则模式不需要模型连接，SDK 自动重试必须关闭以服从调用预算。
+        # 客户端延迟创建；SDK 自动重试必须关闭以服从调用预算。
         self._model = init_chat_model(
             self.settings.llm_model,
             model_provider="openai",

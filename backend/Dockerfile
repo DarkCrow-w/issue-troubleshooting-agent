@@ -7,8 +7,7 @@ COPY backend /app/backend
 RUN pip install --no-cache-dir --no-deps /app/backend
 COPY config /app/config
 COPY skills /app/skills
-COPY examples /app/examples
-RUN useradd -m app && mkdir /app/data && chown app /app/data
-ENV DATA_DIR=/app/data CONFIG_PATH=/app/config/settings.yaml SKILLS_DIR=/app/skills REPLAY_PATH=/app/examples/transaction.json
+RUN useradd -m app
+ENV CONFIG_PATH=/app/config/settings.yaml SKILLS_DIR=/app/skills
 USER app
 CMD ["uvicorn", "troubleshooter.api.agent:create_app", "--factory", "--host", "0.0.0.0", "--port", "8001"]

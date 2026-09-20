@@ -11,21 +11,17 @@ class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=PROJECT_ROOT / ".env", extra="ignore")
 
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    database_url: str = ""
-    source_mode: str = "replay"
-    model_mode: str = "offline"
+    database_url: str = Field(min_length=1)
     agent_url: str = "http://127.0.0.1:8001"
-    service_token: str = "local-development-only"
-    data_dir: Path = PROJECT_ROOT / "data"
+    service_token: str = Field(min_length=16)
     config_path: Path = PROJECT_ROOT / "config/settings.yaml"
     skills_dir: Path = PROJECT_ROOT / "skills"
-    replay_path: Path = PROJECT_ROOT / "examples/transaction.json"
-    splunk_url: str = ""
-    splunk_token: str = ""
+    splunk_url: str = Field(min_length=1)
+    splunk_token: str = Field(min_length=1)
     splunk_verify_tls: bool = True
-    llm_base_url: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
-    llm_api_key: str = ""
-    llm_model: str = "qwen3.8-flash"
+    llm_base_url: str = Field(min_length=1)
+    llm_api_key: str = Field(min_length=1)
+    llm_model: str = Field(min_length=1)
     llm_context_tokens: int = 32000
     llm_max_output_tokens: int = Field(default=8192, ge=1)
     retention_hours: int = 24

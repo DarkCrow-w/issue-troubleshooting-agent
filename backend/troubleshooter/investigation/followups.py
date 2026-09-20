@@ -94,7 +94,7 @@ class FollowupPlanner:
             return {"next_query": None}
         warnings = list(state["warnings"])
         proposals = list(state["proposals"])
-        if not state["model_planned"] and state["events"] and self.model.enabled:
+        if not state["model_planned"] and state["events"]:
             compact = [
                 {
                     "event_id": e.id,

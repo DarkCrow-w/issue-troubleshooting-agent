@@ -42,8 +42,6 @@ def build_graph(
         warnings, notes = list(state["warnings"]), list(state["notes"])
         if not state["events"]:
             warnings.append("指定范围内没有可确认归属的日志，无法判断交易成功或失败")
-        if not models.enabled:
-            notes.append("离线规则模式：未调用模型，根因需要进一步验证")
         return {
             "chunks": prepare_chunks(state, request, config, budget),
             "warnings": warnings,
@@ -56,7 +54,7 @@ def build_graph(
         return await models.analyse_chunk(state)
 
     def after_prepare(state):
-        return "analyse_chunk" if state["chunks"] and models.enabled else "report"
+        return "analyse_chunk" if state["chunks"] else "report"
 
     def after_chunk(state):
         more = not state["skill_failed"] and state["chunk_index"] < len(state["chunks"])

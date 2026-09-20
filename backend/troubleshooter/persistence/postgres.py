@@ -1,4 +1,4 @@
-"""PostgreSQL task and evidence storage. Callers redact payloads before saving."""
+"""PostgreSQL task and original evidence storage."""
 
 from datetime import datetime, timedelta, timezone
 

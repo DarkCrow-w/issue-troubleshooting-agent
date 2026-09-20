@@ -1,8 +1,6 @@
 export interface WorkflowConfig {
   workflows: { id: string; description: string; skills: string[] }[];
   environments: string[];
-  source_mode: string;
-  model_mode: string;
   model: string;
 }
 export interface Claim {

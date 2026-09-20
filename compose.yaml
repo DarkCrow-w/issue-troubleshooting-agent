@@ -5,18 +5,7 @@ services:
       dockerfile: backend/Dockerfile
     env_file:
       - path: .env
-        required: false
-    environment:
-      DATABASE_URL: ${DOCKER_DATABASE_URL:?Set DOCKER_DATABASE_URL in .env}
-      DATA_DIR: /app/data
-      CONFIG_PATH: /app/config/settings.yaml
-      SKILLS_DIR: /app/skills
-      REPLAY_PATH: ${REPLAY_PATH:-/app/examples/demo-pack.json}
-    volumes:
-      - investigations:/app/data
-      - ./config:/app/config:ro
-      - ./skills:/app/skills:ro
-      - ./examples:/app/examples:ro
+        required: true
     expose: ["8001"]
   api:
     build:
@@ -24,7 +13,7 @@ services:
       dockerfile: backend/Dockerfile
     env_file:
       - path: .env
-        required: false
+        required: true
     environment:
       AGENT_URL: http://agent:8001
     command: [uvicorn, "troubleshooter.api.public:create_app", --factory, --host, "0.0.0.0", --port, "8000"]
@@ -36,5 +25,3 @@ services:
       dockerfile: frontend/Dockerfile
     ports: ["127.0.0.1:8080:80"]
     depends_on: [api]
-volumes:
-  investigations:

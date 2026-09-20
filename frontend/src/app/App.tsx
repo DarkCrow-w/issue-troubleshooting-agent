@@ -70,11 +70,7 @@ export default function App() {
             onSubmit={investigate}
           />
           <p className="composer-hint">
-            {config?.source_mode === "replay" ? "演示日志" : "Splunk"} ·{" "}
-            {config?.model_mode === "offline"
-              ? "规则分析"
-              : config?.model || "连接中"}{" "}
-            · 结论可回查原始证据
+            Splunk · {config?.model || "连接中"} · 结论可回查原始证据
           </p>
         </div>
       </main>

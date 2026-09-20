@@ -25,8 +25,6 @@ class FollowupPlan(BaseModel):
 class ModelCallInterface(Protocol):
     """调查流程可见的稳定 interface；调用方不接触模型 SDK 与输出 parser。"""
 
-    enabled: bool
-
     async def propose_followups(
         self,
         prompt: str,
@@ -74,7 +72,6 @@ class ModelCalls:
         budget: RunBudget,
         client: JsonModel | None = None,
     ):
-        self.enabled = settings.model_mode != "offline"
         self.client = client or ModelClient(settings, budget)
 
     async def propose_followups(

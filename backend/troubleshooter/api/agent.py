@@ -44,8 +44,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         return {
             "workflows": [{"id": k, **v} for k, v in service.config["workflows"].items()],
             "environments": list(service.config["environments"]),
-            "source_mode": settings.source_mode,
-            "model_mode": settings.model_mode,
             "model": settings.llm_model,
         }
 
