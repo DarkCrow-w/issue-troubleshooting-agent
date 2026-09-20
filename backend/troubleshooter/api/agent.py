@@ -10,6 +10,7 @@ from troubleshooter.config.settings import Settings, get_settings
 from troubleshooter.domain.models import InvestigationRequest
 from troubleshooter.investigation.tasks import TaskManager
 from troubleshooter.logs.sources import spl_literal
+from troubleshooter.logs.sources.query import validate_spl
 from troubleshooter.observability.logging import configure_logging
 
 
@@ -52,7 +53,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     async def create(request: InvestigationRequest):
         try:
             service.registry.workflow(request.workflow)
-            spl_literal(request.correlation_id)
+            if request.correlation_id:
+                spl_literal(request.correlation_id)
+            validate_spl(request.spl)
             if request.environment not in service.config["environments"]:
                 raise ValueError("未知环境")
         except ValueError as exc:

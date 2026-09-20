@@ -45,11 +45,15 @@ def validate_proposal(
             or event.id in state["context_searched"]
         ):
             return None
-        # 上下文补查必须收窄到同实例附近，且不能越过用户授权的时间范围。
+        # 上下文补查必须收窄到同实例附近；用户填写时间时再应用上下界。
         try:
             timestamp = datetime.fromisoformat(event.timestamp)
-            query.start_time = max(query.start_time, timestamp - timedelta(seconds=2))
-            query.end_time = min(query.end_time, timestamp + timedelta(seconds=2))
+            context_start = timestamp - timedelta(seconds=2)
+            context_end = timestamp + timedelta(seconds=2)
+            query.start_time = (
+                max(request.start_time, context_start) if request.start_time else context_start
+            )
+            query.end_time = min(request.end_time, context_end) if request.end_time else context_end
         except (ValueError, TypeError):
             return None
         query.service, query.instance = event.service, event.instance

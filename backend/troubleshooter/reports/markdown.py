@@ -76,8 +76,9 @@ def render_markdown(report: dict) -> str:
         )
     lines.extend(["", "## 查询记录", ""])
     for query in report["queries"]:
+        start_time = query["start_time"] or "未指定"
+        end_time = query["end_time"] or "未指定"
         lines.append(
-            f"- {query['reason']}：{query['count']} 条结果；"
-            f"时间范围 {query['start_time']} 至 {query['end_time']}。"
+            f"- {query['reason']}：{query['count']} 条结果；时间范围 {start_time} 至 {end_time}。"
         )
     return "\n".join(lines)

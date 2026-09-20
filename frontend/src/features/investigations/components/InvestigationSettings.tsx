@@ -6,6 +6,7 @@ export interface SearchSettings {
   workflow: string;
   startTime: string;
   endTime: string;
+  spl: string;
   cleaning: boolean;
 }
 
@@ -19,7 +20,7 @@ export default function InvestigationSettings({
   value: SearchSettings;
   onChange: (patch: Partial<SearchSettings>) => void;
 }) {
-  const { environment, workflow, startTime, endTime, cleaning } = value;
+  const { environment, workflow, startTime, endTime, spl, cleaning } = value;
   return (
     <details className="settings">
       <summary>
@@ -57,7 +58,6 @@ export default function InvestigationSettings({
             <input
               aria-label="开始时间"
               type="datetime-local"
-              required
               value={startTime}
               onChange={(e) => onChange({ startTime: e.target.value })}
             />
@@ -67,12 +67,22 @@ export default function InvestigationSettings({
             <input
               aria-label="结束时间"
               type="datetime-local"
-              required
               value={endTime}
               onChange={(e) => onChange({ endTime: e.target.value })}
             />
           </label>
         </div>
+        <label className="spl-option">
+          Splunk SPL · 可选
+          <textarea
+            aria-label="Splunk SPL"
+            value={spl}
+            onChange={(event) => onChange({ spl: event.target.value })}
+            placeholder={'例如：search correlationId="..." | fields _time appName message'}
+            rows={3}
+          />
+          <span>会自动限制到所选环境配置的 index；可与关联 ID 一起使用。</span>
+        </label>
         <label className="cleaning-option">
           <input
             type="checkbox"

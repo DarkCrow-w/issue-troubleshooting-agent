@@ -5,22 +5,28 @@ from pydantic import BaseModel, Field, model_validator
 
 
 class InvestigationRequest(BaseModel):
-    correlation_id: str = Field(min_length=1, max_length=256)
+    correlation_id: str = Field(default="", max_length=256)
+    spl: str = Field(default="", max_length=10_000)
     environment: str
-    start_time: datetime
-    end_time: datetime
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     cleaning_enabled: bool = True
     workflow: str = "standard"
     question: str = Field(default="", max_length=2000)
 
     @model_validator(mode="after")
     def valid_window(self):
-        if self.start_time.tzinfo is None or self.end_time.tzinfo is None:
-            raise ValueError("时间必须包含时区")
-        if self.end_time <= self.start_time:
+        supplied_times = [value for value in (self.start_time, self.end_time) if value]
+        if any(value.tzinfo is None for value in supplied_times):
+            raise ValueError("已填写的时间必须包含时区")
+        if self.start_time and self.end_time and self.end_time <= self.start_time:
             raise ValueError("结束时间必须晚于开始时间")
-        if not self.correlation_id.strip() or any(ord(c) < 32 for c in self.correlation_id):
-            raise ValueError("关联 ID 不能为空或包含控制字符")
+        self.correlation_id = self.correlation_id.strip()
+        self.spl = self.spl.strip()
+        if not self.correlation_id and not self.spl:
+            raise ValueError("关联 ID 和 Splunk SPL 至少填写一个")
+        if any(ord(char) < 32 for char in self.correlation_id):
+            raise ValueError("关联 ID 不得包含控制字符")
         return self
 
 
@@ -80,9 +86,10 @@ class FollowupProposal(BaseModel):
 
 class QuerySpec(BaseModel):
     environment: str
-    start_time: datetime
-    end_time: datetime
+    start_time: datetime | None = None
+    end_time: datetime | None = None
     identifier: str = ""
+    spl: str = ""
     service: str = ""
     instance: str = ""
     reason: str = "首次关联 ID 查询"

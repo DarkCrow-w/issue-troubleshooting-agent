@@ -19,9 +19,10 @@ export default function InvestigationForm({ config, busy, onSubmit }: Props) {
     workflow: "standard",
     startTime: "2026-07-28T16:50",
     endTime: "2026-07-28T16:55",
+    spl: "",
     cleaning: true,
   });
-  const { environment, workflow, startTime, endTime, cleaning } = settings;
+  const { environment, workflow, startTime, endTime, spl, cleaning } = settings;
   function updateSettings(patch: Partial<SearchSettings>) {
     setSettings((current) => ({ ...current, ...patch }));
   }
@@ -40,10 +41,11 @@ export default function InvestigationForm({ config, busy, onSubmit }: Props) {
     // 页面时间按业务时区提交，避免浏览器本地时区造成检索范围偏移。
     void onSubmit({
       correlation_id: correlationId.trim(),
+      spl: spl.trim(),
       environment,
       workflow,
-      start_time: `${startTime}:00+08:00`,
-      end_time: `${endTime}:00+08:00`,
+      start_time: startTime ? `${startTime}:00+08:00` : null,
+      end_time: endTime ? `${endTime}:00+08:00` : null,
       cleaning_enabled: cleaning,
       question,
     });
@@ -53,10 +55,9 @@ export default function InvestigationForm({ config, busy, onSubmit }: Props) {
       <input
         className="transaction-input"
         aria-label="交易关联 ID"
-        required
         value={correlationId}
         onChange={(e) => setCorrelationId(e.target.value)}
-        placeholder="输入 seqNo 或 correlationId"
+        placeholder="输入 seqNo / correlationId，或在设置中填写 SPL"
       />
       <textarea
         className="question-input"
@@ -77,7 +78,7 @@ export default function InvestigationForm({ config, busy, onSubmit }: Props) {
           className="send-button"
           aria-label={busy ? "排查进行中" : "开始排查"}
           title="开始排查"
-          disabled={!config || busy}
+          disabled={!config || busy || (!correlationId.trim() && !spl.trim())}
           type="submit"
         >
           {busy ? (

@@ -30,14 +30,14 @@ class SplunkSource:
         ) as client:
             sid = ""
             try:
+                search_data = {"search": spl, "output_mode": "json"}
+                if query.start_time:
+                    search_data["earliest_time"] = query.start_time.timestamp()
+                if query.end_time:
+                    search_data["latest_time"] = query.end_time.timestamp()
                 response = await client.post(
                     "/services/search/jobs",
-                    data={
-                        "search": spl,
-                        "earliest_time": query.start_time.timestamp(),
-                        "latest_time": query.end_time.timestamp(),
-                        "output_mode": "json",
-                    },
+                    data=search_data,
                 )
                 response.raise_for_status()
                 sid = response.json()["sid"]

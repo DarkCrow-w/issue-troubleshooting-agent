@@ -1,13 +1,28 @@
 """Splunk and local replay implement the same bounded search interface."""
 
 import json
+import re
 from datetime import datetime
 from pathlib import Path
 
 from troubleshooter.domain.models import QuerySpec, SearchResult
 from troubleshooter.logs.normalization import normalize
 
-from .query import build_spl
+from .query import build_spl, validate_spl
+
+
+def replay_identifier(spl: str, correlation_fields: list[str]) -> str:
+    """让本地 Demo 支持最常用的 ``correlationId=...`` 精确 SPL 条件。"""
+
+    search_filter, _ = validate_spl(spl)
+    for field in correlation_fields:
+        pattern = rf'\b{re.escape(field)}\s*=\s*(?:"((?:\\.|[^"])*)"|([\w.:/-]+))'
+        match = re.search(pattern, search_filter)
+        if not match:
+            continue
+        value = match.group(1) or match.group(2)
+        return value.replace('\\"', '"').replace("\\\\", "\\")
+    return ""
 
 
 class ReplaySource:
@@ -23,6 +38,9 @@ class ReplaySource:
         except json.JSONDecodeError:
             records = [json.loads(line) for line in content.splitlines() if line.strip()]
         result = SearchResult(query=build_spl(query, self.config), sid="replay")
+        custom_identifier = replay_identifier(query.spl, self.config["correlation_fields"])
+        if query.spl:
+            result.warnings.append("回放模式仅模拟 SPL 中的精确关联 ID 条件，不执行完整管道语义")
         for wrapper in records:
             if wrapper.get("preview") is True:
                 continue
@@ -30,12 +48,18 @@ class ReplaySource:
             event = normalize(record, self.config)
             try:
                 when = datetime.fromisoformat(event.timestamp)
-                in_window = query.start_time <= when <= query.end_time
+                after_start = not query.start_time or when >= query.start_time
+                before_end = not query.end_time or when <= query.end_time
+                in_window = after_start and before_end
             except (ValueError, TypeError):
-                in_window = False
+                in_window = not query.start_time and not query.end_time
             if not in_window:
                 continue
             if query.identifier and query.identifier not in event.correlation_ids + list(
+                event.ids.values()
+            ):
+                continue
+            if custom_identifier and custom_identifier not in event.correlation_ids + list(
                 event.ids.values()
             ):
                 continue

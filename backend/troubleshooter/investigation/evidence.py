@@ -55,7 +55,11 @@ class EvidenceCollector:
             ):
                 warnings.append("存在无法确认交易归属的检索结果，已排除；可补充关联字段解析规则")
                 continue
-            if not query.identifier and not transaction_ids.intersection(event.correlation_ids):
+            if (
+                not query.identifier
+                and not query.spl
+                and not transaction_ids.intersection(event.correlation_ids)
+            ):
                 event.scope = "context"
             previous = events.get(event.id)
             if previous and (previous.scope == "transaction" or event.scope == "context"):

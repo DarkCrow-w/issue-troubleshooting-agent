@@ -6,7 +6,12 @@ import pytest
 from fastapi.testclient import TestClient
 
 from troubleshooter.api.agent import create_app
-from troubleshooter.domain.models import FollowupProposal, InvestigationRequest, SearchResult
+from troubleshooter.domain.models import (
+    FollowupProposal,
+    InvestigationRequest,
+    QuerySpec,
+    SearchResult,
+)
 from troubleshooter.investigation.service import InvestigationService
 from troubleshooter.logs.sources import ReplaySource, build_spl
 from troubleshooter.persistence.postgres import Store
@@ -14,13 +19,14 @@ from troubleshooter.skills import SkillRegistry
 
 
 def request(**changes):
-    return InvestigationRequest(
-        correlation_id="demo-transaction-001",
-        environment="demo",
-        start_time=datetime.fromisoformat("2026-07-28T16:50:00+08:00"),
-        end_time=datetime.fromisoformat("2026-07-28T16:55:00+08:00"),
-        **changes,
-    )
+    values = {
+        "correlation_id": "demo-transaction-001",
+        "environment": "demo",
+        "start_time": datetime.fromisoformat("2026-07-28T16:50:00+08:00"),
+        "end_time": datetime.fromisoformat("2026-07-28T16:55:00+08:00"),
+    }
+    values.update(changes)
+    return InvestigationRequest(**values)
 
 
 def make_service(settings, config, source=None):
@@ -139,8 +145,6 @@ def test_skill_registry_validation_and_custom_llm(settings, config, tmp_path):
 
 
 def test_spl_injection_and_environment_restrictions(config):
-    from troubleshooter.domain.models import QuerySpec
-
     spec = QuerySpec(
         **request().model_dump(
             exclude={"correlation_id", "cleaning_enabled", "workflow", "question"}
@@ -156,6 +160,61 @@ def test_spl_injection_and_environment_restrictions(config):
     spec.environment = "not-configured"
     with pytest.raises(ValueError):
         build_spl(spec, config)
+
+
+def test_optional_time_and_custom_spl(config):
+    custom = request(
+        correlation_id="",
+        spl='search correlationId="demo-transaction-001" | fields _time appName message',
+        start_time=None,
+        end_time=None,
+    )
+    spec = QuerySpec(
+        environment=custom.environment,
+        start_time=custom.start_time,
+        end_time=custom.end_time,
+        spl=custom.spl,
+    )
+
+    spl = build_spl(spec, config)
+
+    assert 'index="demo_transactions"' in spl
+    assert '(correlationId="demo-transaction-001")' in spl
+    assert spl.endswith("| fields _time appName message")
+    with pytest.raises(ValueError, match="至少填写一个"):
+        request(correlation_id="", spl="")
+    with pytest.raises(ValueError, match="不允许"):
+        build_spl(QuerySpec(environment="demo", spl="| outputlookup unsafe.csv"), config)
+
+
+async def test_replay_without_time_window(settings, config):
+    task = await run(
+        make_service(settings, config),
+        request(start_time=None, end_time=None),
+    )
+
+    assert task["status"] == "completed"
+    assert task["report"]["coverage"]["observed_events"] > 0
+    assert task["report"]["queries"][0]["start_time"] is None
+    assert task["report"]["queries"][0]["end_time"] is None
+
+
+async def test_replay_supports_exact_id_in_custom_spl(settings, config):
+    task = await run(
+        make_service(settings, config),
+        request(
+            correlation_id="",
+            spl='search correlationId="demo-transaction-001" | fields _time appName message',
+            start_time=None,
+            end_time=None,
+        ),
+    )
+
+    serialized_graph = json.dumps(task["report"]["graph"])
+    assert "demo-transaction-001" not in serialized_graph
+    assert "another-transaction" not in serialized_graph
+    assert task["report"]["coverage"]["observed_events"] > 0
+    assert any("回放模式仅模拟" in warning for warning in task["report"]["warnings"])
 
 
 def test_api_validation_evidence_and_restart(settings):

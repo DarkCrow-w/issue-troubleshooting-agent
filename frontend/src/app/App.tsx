@@ -22,7 +22,7 @@ export default function App() {
     <div className="app-shell">
       <header className="topbar" inert={!!evidence}>
         <a href="/" className="brand">
-          TraceLens <span>交易排查助手</span>
+          IssueTroubleshooting <span>交易排查助手</span>
         </a>
         <button
           className="new-chat"
@@ -38,14 +38,14 @@ export default function App() {
         {!taskId && (
           <div className="welcome-heading">
             <h1>这笔交易，哪里出了问题？</h1>
-            <p>输入关联 ID，从日志中找到答案。</p>
+            <p>输入关联 ID 或 Splunk SPL，从日志中找到答案。</p>
           </div>
         )}
         {taskId && (
           <div className="conversation-content">
             <div className="user-message">
               <span>排查交易</span>
-              <code>{submitted?.correlation_id}</code>
+              <code>{submitted?.correlation_id || "自定义 Splunk SPL"}</code>
               {submitted?.question && <p>{submitted.question}</p>}
             </div>
             <ReportPanel

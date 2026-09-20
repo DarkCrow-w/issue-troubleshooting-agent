@@ -59,7 +59,7 @@ function ResultHeader({
   return (
     <div className="result-heading">
       <div className="section-heading">
-        <h2>TraceLens</h2>
+        <h2>IssueTroubleshooting</h2>
         <span className={`status ${status}`}>{statusLabels[status]}</span>
       </div>
       <div className="result-actions">

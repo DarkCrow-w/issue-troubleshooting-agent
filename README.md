@@ -1,4 +1,4 @@
-# TraceLens · 交易问题排查 Agent
+# IssueTroubleshooting · 交易问题排查 Agent
 
 通过交易关联 ID 从 Splunk 查询日志，还原服务/API 调用，定位失败步骤，输出带证据的诊断。前端使用 React，API Service 和 Agent Service 是两个独立 Python 进程。
 
@@ -187,12 +187,28 @@ output: evidence-claims
 ```json
 {
   "correlation_id": "demo-java-timeout-001",
+  "spl": "",
   "environment": "demo",
   "start_time": "2026-07-28T16:50:00+08:00",
   "end_time": "2026-07-28T16:55:00+08:00",
   "cleaning_enabled": true,
   "workflow": "standard",
   "question": "请定位失败步骤，区分传播错误与根因假设"
+}
+```
+
+`correlation_id` 与 `spl` 至少填写一个。`start_time`、`end_time` 都可以传 `null`；只填写一个时表示单侧时间边界。自定义 SPL 会与所选环境的 index 限制、关联 ID 条件组合，例如：
+
+```json
+{
+  "correlation_id": "",
+  "spl": "search correlationId=\"交易ID\" | fields _time appName message stacktrace",
+  "environment": "prod",
+  "start_time": null,
+  "end_time": null,
+  "cleaning_enabled": true,
+  "workflow": "standard",
+  "question": "定位最早失败步骤"
 }
 ```
 

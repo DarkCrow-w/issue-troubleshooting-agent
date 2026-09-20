@@ -71,10 +71,11 @@ export interface Task {
 
 export interface InvestigationRequest {
   correlation_id: string;
+  spl: string;
   environment: string;
   workflow: string;
-  start_time: string;
-  end_time: string;
+  start_time: string | null;
+  end_time: string | null;
   cleaning_enabled: boolean;
   question: string;
 }

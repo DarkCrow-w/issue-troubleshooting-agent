@@ -59,6 +59,30 @@ async def test_splunk_pagination_final_results_and_cleanup(settings, config, mon
     assert "earliest_time=" in requests[0].content.decode()
 
 
+async def test_splunk_omits_empty_time_bounds(settings, config, monkeypatch):
+    requests = []
+
+    def handler(request):
+        requests.append(request)
+        if request.url.path.endswith("/control"):
+            return httpx.Response(200, json={})
+        if request.url.path.endswith("/jobs"):
+            return httpx.Response(201, json={"sid": "without-time"})
+        return httpx.Response(
+            200, json={"entry": [{"content": {"isDone": True, "resultCount": 0}}]}
+        )
+
+    use_transport(monkeypatch, handler)
+    settings.splunk_url, settings.splunk_token = "https://splunk.test", "token"
+    spec = QuerySpec(environment="demo", spl='correlationId="demo-id"')
+
+    await SplunkSource(settings, config).search(spec, 10, 10_000)
+
+    submitted = requests[0].content.decode()
+    assert "earliest_time=" not in submitted
+    assert "latest_time=" not in submitted
+
+
 async def test_splunk_page_failure_preserves_previous_results(settings, config, monkeypatch):
     def handler(request):
         path = request.url.path
