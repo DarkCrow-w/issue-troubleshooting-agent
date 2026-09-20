@@ -1,6 +1,10 @@
 environments:
+  sit:
+    indexes: [replace_with_sit_index]
+  uat:
+    indexes: [replace_with_uat_index]
   production:
-    indexes: [replace_with_company_index]
+    indexes: [replace_with_production_index]
 correlation_fields:
   - correlationId
   - seqNo

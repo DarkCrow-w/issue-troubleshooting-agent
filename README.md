@@ -29,17 +29,27 @@ cp .env.example .env
 chmod 600 .env
 ```
 
-2. 在 `.env` 中填写 PostgreSQL、Splunk、内部模型网关和内部服务令牌。
+2. 在 `.env` 中填写 PostgreSQL、各环境的 Splunk 连接、内部模型网关和内部服务令牌。`SPLUNK_CONNECTIONS` 是一行 JSON：
+
+```dotenv
+SPLUNK_CONNECTIONS='{"sit":{"url":"https://splunk-sit.company.internal:8089","token":"sit-token","verify_tls":true},"uat":{"url":"https://splunk-uat.company.internal:8089","token":"uat-token","verify_tls":true},"production":{"url":"https://splunk.company.internal:8089","token":"production-token","verify_tls":true}}'
+```
+
+每个环境可以使用不同的 URL、Token 和 TLS 设置。如果几个环境共用同一个 Splunk，只需重复填写相同 URL；各环境仍可配置不同 index。
 
 3. 修改 `config/settings.yaml`：
 
 ```yaml
 environments:
+  sit:
+    indexes: [company_sit_index]
+  uat:
+    indexes: [company_uat_index]
   production:
-    indexes: [company_application_index]
+    indexes: [company_production_index]
 ```
 
-同时按实际日志调整 `correlation_fields`、服务别名、复合 ID 服务和成功业务码。
+`.env` 中的连接名称必须覆盖这里的所有环境名称。前端环境下拉框来自这里；后端收到查询后，会使用同名的 Splunk 连接和 index 白名单。请同时按实际日志调整 `correlation_fields`、服务别名、复合 ID 服务和成功业务码。
 
 4. 构建并启动：
 
@@ -57,9 +67,7 @@ docker compose up -d --build
 | --- | --- |
 | `SERVICE_TOKEN` | API 与 Agent 之间的内部认证 |
 | `DATABASE_URL` | PostgreSQL 连接串 |
-| `SPLUNK_URL` | Splunk Management API 地址 |
-| `SPLUNK_TOKEN` | Splunk Bearer token |
-| `SPLUNK_VERIFY_TLS` | 是否验证 Splunk TLS 证书 |
+| `SPLUNK_CONNECTIONS` | 各环境的 Splunk URL、Bearer token 和 TLS 设置，格式为 JSON 对象 |
 | `LLM_BASE_URL` | 公司内部 OpenAI 兼容模型地址 |
 | `LLM_API_KEY` | 模型访问密钥 |
 | `LLM_MODEL` | 模型名称 |

@@ -1,10 +1,18 @@
 from pathlib import Path
 from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import BaseModel, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
+
+
+class SplunkConnection(BaseModel):
+    """一个运行环境对应一套独立的 Splunk 连接参数。"""
+
+    url: str = Field(min_length=1)
+    token: str = Field(min_length=1)
+    verify_tls: bool = True
 
 
 class Settings(BaseSettings):
@@ -16,9 +24,7 @@ class Settings(BaseSettings):
     service_token: str = Field(min_length=16)
     config_path: Path = PROJECT_ROOT / "config/settings.yaml"
     skills_dir: Path = PROJECT_ROOT / "skills"
-    splunk_url: str = Field(min_length=1)
-    splunk_token: str = Field(min_length=1)
-    splunk_verify_tls: bool = True
+    splunk_connections: dict[str, SplunkConnection] = Field(min_length=1)
     llm_base_url: str = Field(min_length=1)
     llm_api_key: str = Field(min_length=1)
     llm_model: str = Field(min_length=1)

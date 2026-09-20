@@ -1,4 +1,4 @@
-"""Splunk and local replay implement the same bounded search interface."""
+"""通过当前排查环境对应的 Splunk 连接执行有界查询。"""
 
 import asyncio
 import json
@@ -13,19 +13,18 @@ from .query import build_spl
 
 class SplunkSource:
     def __init__(self, settings: Settings, config: dict):
-        if not settings.splunk_url or not settings.splunk_token:
-            raise ValueError("live 模式需要配置 SPLUNK_URL 和 SPLUNK_TOKEN")
         self.settings = settings
         self.config = config
 
     async def search(self, query: QuerySpec, max_events: int, max_bytes: int) -> SearchResult:
         spl = build_spl(query, self.config)
         result = SearchResult(query=spl)
-        headers = {"Authorization": "Bearer " + self.settings.splunk_token}
+        connection = self.settings.splunk_connections[query.environment]
+        headers = {"Authorization": "Bearer " + connection.token}
         async with httpx.AsyncClient(
-            base_url=self.settings.splunk_url.rstrip("/"),
+            base_url=connection.url.rstrip("/"),
             headers=headers,
-            verify=self.settings.splunk_verify_tls,
+            verify=connection.verify_tls,
             timeout=30,
         ) as client:
             sid = ""
