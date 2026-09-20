@@ -1,0 +1,29 @@
+{
+  "name": "issue-troubleshooting",
+  "private": true,
+  "version": "0.2.0",
+  "type": "module",
+  "scripts": {
+    "postinstall": "python3 -m venv .venv && .venv/bin/python -m pip install -c backend/requirements.lock -e backend",
+    "dev": "concurrently --kill-others-on-fail --names agent,api,web \"npm:dev:agent\" \"npm:dev:api\" \"npm:dev:frontend\"",
+    "start": "npm run dev",
+    "dev:frontend": "vite frontend --config frontend/vite.config.ts --host 127.0.0.1 --port 5173",
+    "dev:backend": "concurrently --kill-others-on-fail --names agent,api \"npm:dev:agent\" \"npm:dev:api\"",
+    "dev:agent": ".venv/bin/python -m uvicorn troubleshooter.api.agent:create_app --factory --app-dir backend --host 127.0.0.1 --port 8001",
+    "dev:api": ".venv/bin/python -m uvicorn troubleshooter.api.public:create_app --factory --app-dir backend --host 127.0.0.1 --port 8000",
+    "build": "tsc -b frontend/tsconfig.json && vite build frontend --config frontend/vite.config.ts"
+  },
+  "dependencies": {
+    "lucide-react": "^0.468.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.2.1",
+    "typescript": "^5.7.0",
+    "vite": "^6.1.0"
+  }
+}

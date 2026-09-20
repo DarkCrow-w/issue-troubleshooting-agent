@@ -63,56 +63,53 @@ docker compose up -d --build
 
 ## 不使用 Docker 本地启动
 
-本地运行需要 Python 3.11 以上、Node.js 22 和一个可以连接的 PostgreSQL。所有命令都从项目根目录开始执行。
+本地运行需要 Python 3.11 以上、Node.js 22 和一个可以连接的 PostgreSQL。前后端依赖和运行命令全部由根目录的 `package.json` 管理，不使用额外启动脚本。
 
-1. 首次安装后端依赖：
+1. 首次安装全部依赖：
 
 ```bash
-python3 -m venv .venv
-source .venv/bin/activate
-python -m pip install -c backend/requirements.lock -e backend
+npm install
 ```
 
-如果公司网络不能访问公开软件源，请把 pip 和 npm 配置为公司的制品仓库后再安装。
+这条命令会在根目录安装前端依赖、创建 `.venv` 并安装锁定版本的 Python 依赖。如果公司网络不能访问公开软件源，请先把 pip 和 npm 配置为公司的制品仓库。
 
-2. 首次准备配置：
+2. 首次复制配置，然后填写公司环境的真实值：
 
 ```bash
 cp .env.example .env
 chmod 600 .env
 ```
 
-把 `.env` 中的 `DATABASE_URL`、`SPLUNK_CONNECTIONS` 和模型配置替换为公司环境的真实值，并同步修改 `config/settings.yaml` 中的环境和 index。已有 `.env` 时不要再次复制覆盖。
+修改 `.env` 中的 `DATABASE_URL`、`SPLUNK_CONNECTIONS` 和模型配置，并同步修改 `config/settings.yaml` 中的环境和 index。
 
-3. 在第一个终端启动 Agent Service：
-
-```bash
-source .venv/bin/activate
-uvicorn troubleshooter.api.agent:create_app \
-  --factory --app-dir backend --host 127.0.0.1 --port 8001
-```
-
-Agent Service 负责 Splunk 查询、LangGraph 排查流程、模型调用和 PostgreSQL 读写。
-
-4. 在第二个终端启动浏览器 API：
+3. 一条命令启动 Agent、浏览器 API 和前端：
 
 ```bash
-source .venv/bin/activate
-uvicorn troubleshooter.api.public:create_app \
-  --factory --app-dir backend --host 127.0.0.1 --port 8000
-```
-
-本地模式下 `AGENT_URL` 默认是 `http://127.0.0.1:8001`，通常不需要额外配置。
-
-5. 在第三个终端启动前端：
-
-```bash
-cd frontend
-npm ci
 npm run dev
 ```
 
-浏览器访问 <http://127.0.0.1:5173/>。`npm ci` 只需在首次安装或依赖变化后运行，之后执行 `npm run dev` 即可。
+浏览器访问 <http://127.0.0.1:5173/>。按一次 `Ctrl+C` 会同时停止三个进程。
+
+需要分别开发或启停时，使用以下命令：
+
+```bash
+npm run dev:frontend  # 只启动前端 :5173
+npm run dev:backend   # 启动 Agent :8001 和 Browser API :8000
+npm run dev:agent     # 只启动 Agent
+npm run dev:api       # 只启动 Browser API
+```
+
+前后端分开运行时，可以开两个终端：
+
+```bash
+# 终端一
+npm run dev:backend
+
+# 终端二
+npm run dev:frontend
+```
+
+本地模式下 `AGENT_URL` 默认是 `http://127.0.0.1:8001`。前端开发服务器会把 `/api` 请求代理到 `http://127.0.0.1:8000`。
 
 可以用下面两个地址检查后端是否启动成功：
 
@@ -121,7 +118,7 @@ curl http://127.0.0.1:8001/health
 curl http://127.0.0.1:8000/health
 ```
 
-两个接口都返回 `status: ok` 后，再打开前端。停止系统时，在三个终端中分别按 `Ctrl+C`。
+两个接口都返回 `status: ok` 后即可使用。
 
 ## 必需环境变量
 
