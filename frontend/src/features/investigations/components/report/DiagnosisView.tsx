@@ -58,17 +58,17 @@ function ClaimRow({
 function ClaimList({
   items,
   hypothesis = false,
+  emptyMessage,
   openEvidence,
 }: {
   items: Claim[];
   hypothesis?: boolean;
+  emptyMessage?: string;
   openEvidence: OpenEvidence;
 }) {
-  // 空结果先返回，后面只处理有数据的列表，避免三元表达式套 map。
+  // 空结果先返回，并让上层说清是“证据不足”还是“模型失败”。
   if (!items.length) {
-    const message = hypothesis
-      ? "证据不足或模型未启用，尚未生成根因假设。"
-      : "暂无可确认的失败事实。";
+    const message = emptyMessage ?? "暂无可确认的失败事实。";
     return <p className="muted">{message}</p>;
   }
   return items.map((claim, index) => (
@@ -131,6 +131,12 @@ export default function DiagnosisView({
   report: Report;
   openEvidence: OpenEvidence;
 }) {
+  const modelFailed = report.warnings.some((warning) =>
+    warning.startsWith("模型"),
+  );
+  const emptyHypothesisMessage = modelFailed
+    ? "模型分析未完成；规则定位结果仍可使用，具体原因见结果限制。"
+    : "现有证据还不足以形成可验证的根因假设。";
   return (
     <>
       <div className="summary-card">
@@ -150,6 +156,7 @@ export default function DiagnosisView({
       <ClaimList
         items={report.hypotheses}
         hypothesis
+        emptyMessage={emptyHypothesisMessage}
         openEvidence={openEvidence}
       />
       <Suggestions items={report.unknowns} unknown />

@@ -34,7 +34,6 @@ class ModelClient:
         self.settings = settings
         self.budget = budget
         self._model = model
-        self._owns_model = model is None
 
     def _get_model(self) -> BaseChatModel:
         if self._model is not None:
@@ -121,9 +120,3 @@ class ModelClient:
             log_event("model.output_truncated", level=WARNING)
             raise ModelUnavailable("模型输出达到长度上限；当前分析未完成")
         return response
-
-    async def aclose(self):
-        if self._owns_model and self._model is not None:
-            # 只关闭本类创建的 SDK 客户端；测试或调用方注入的模型由调用方管理。
-            await self._model.root_async_client.close()
-            self._model.root_client.close()
