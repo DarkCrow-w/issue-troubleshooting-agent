@@ -163,6 +163,138 @@ function JourneyNodeCard({
   );
 }
 
+interface CmAppSummary {
+  service: string;
+  status: JourneyStatus;
+  apiCount: number;
+  callCount: number;
+  reasons: string[];
+  evidenceId?: string;
+  isFaultApp: boolean;
+}
+
+// 聚合状态时优先展示最严重的结果，避免正常调用掩盖同一应用里的异常调用。
+const statusPriority: Record<JourneyStatus, number> = {
+  failed: 5,
+  affected: 4,
+  warning: 3,
+  unknown: 2,
+  success: 1,
+};
+
+function summarizeCmApps(
+  nodes: JourneyNode[],
+  attribution: Journey["attribution"],
+): CmAppSummary[] {
+  const apps = new Map<string, JourneyNode[]>();
+  const attributionEvidence = new Set(attribution.evidence_ids);
+
+  nodes.forEach((node) => {
+    const service = node.service || "服务未知";
+    const appNodes = apps.get(service) ?? [];
+    appNodes.push(node);
+    apps.set(service, appNodes);
+  });
+
+  return Array.from(apps, ([service, appNodes]) => {
+    const status = appNodes.reduce<JourneyStatus>((current, node) => {
+      return statusPriority[node.status] > statusPriority[current]
+        ? node.status
+        : current;
+    }, "success");
+    const apiCount = new Set(
+      appNodes.map((node) => node.api).filter((api) => api && api !== "API 未识别"),
+    ).size;
+    const isFaultApp =
+      attribution.domain === "cm" &&
+      appNodes.some(
+        (node) =>
+          node.id === attribution.node_id ||
+          node.evidence_ids.some((id) => attributionEvidence.has(id)),
+      );
+
+    // 根因节点的原因最重要，其次才采用同一应用中其他异常调用的原因。
+    const orderedNodes = [...appNodes].sort((left, right) => {
+      const leftIsRoot = left.id === attribution.node_id ? 1 : 0;
+      const rightIsRoot = right.id === attribution.node_id ? 1 : 0;
+      const statusDifference =
+        statusPriority[right.status] - statusPriority[left.status];
+      return rightIsRoot - leftIsRoot || statusDifference;
+    });
+    const reasons = Array.from(
+      new Set(
+        orderedNodes.flatMap((node) => {
+          const nodeReasons = [...node.failure_reasons];
+          if (node.missing_response) nodeReasons.push("请求已发出，但没有找到对应响应");
+          if (node.pairing_ambiguous) nodeReasons.push("请求与响应配对存在歧义");
+          return nodeReasons;
+        }),
+      ),
+    );
+    const evidenceNode =
+      orderedNodes.find((node) => node.failure_reasons.length > 0) ?? orderedNodes[0];
+
+    return {
+      service,
+      status,
+      apiCount,
+      callCount: appNodes.length,
+      reasons,
+      evidenceId: evidenceNode?.evidence_ids[0],
+      isFaultApp,
+    };
+  });
+}
+
+function CmAppCard({
+  app,
+  openEvidence,
+}: {
+  app: CmAppSummary;
+  openEvidence: OpenEvidence;
+}) {
+  const hasError = app.status !== "success";
+  const visibleReasons = app.reasons.slice(0, 2);
+  const hiddenReasonCount = app.reasons.length - visibleReasons.length;
+
+  return (
+    <article
+      className={`journey-app ${app.status} ${app.isFaultApp ? "highlighted" : ""}`}
+    >
+      <div className="journey-node-heading">
+        <strong>{app.service}</strong>
+        <span className={`journey-status ${app.status}`}>
+          <StatusIcon status={app.status} />
+          {app.isFaultApp ? "故障应用" : statusLabels[app.status]}
+        </span>
+      </div>
+      <span className="journey-app-stats">
+        {app.callCount} 个调用
+        {app.apiCount > 0 && ` · ${app.apiCount} 个 API`}
+      </span>
+      {hasError && (
+        <div className="journey-app-error">
+          <strong>{app.isFaultApp ? "报错原因" : "异常信息"}</strong>
+          <p>
+            {visibleReasons.length > 0
+              ? visibleReasons.join("；")
+              : "日志标记了异常，但没有提取到明确原因"}
+            {hiddenReasonCount > 0 && `；另有 ${hiddenReasonCount} 条`}
+          </p>
+        </div>
+      )}
+      {app.evidenceId && hasError && (
+        <button
+          className="journey-app-evidence"
+          onClick={() => app.evidenceId && openEvidence(app.evidenceId, "raw")}
+        >
+          <Logs size={13} /> 查看关键证据
+        </button>
+      )}
+    </article>
+  );
+}
+
 function EmptyStage() {
   return (
     <div className="journey-empty">
@@ -170,6 +302,34 @@ function EmptyStage() {
       当前日志没有识别到该区域的调用
     </div>
   );
+}
+
+function JourneyStageNodes({
+  stage,
+  attribution,
+  openEvidence,
+}: {
+  stage: Journey["stages"][number];
+  attribution: Journey["attribution"];
+  openEvidence: OpenEvidence;
+}) {
+  if (stage.nodes.length === 0) return <EmptyStage />;
+
+  if (stage.id === "cm") {
+    const apps = summarizeCmApps(stage.nodes, attribution);
+    return apps.map((app) => (
+      <CmAppCard key={app.service} app={app} openEvidence={openEvidence} />
+    ));
+  }
+
+  return stage.nodes.map((node) => (
+    <JourneyNodeCard
+      key={node.id}
+      node={node}
+      openEvidence={openEvidence}
+      highlighted={node.id === attribution.node_id}
+    />
+  ));
 }
 
 export default function TransactionJourney({
@@ -236,15 +396,11 @@ export default function TransactionJourney({
                 </span>
               </header>
               <div className="journey-stage-nodes">
-                {stage.nodes.length === 0 && <EmptyStage />}
-                {stage.nodes.map((node) => (
-                  <JourneyNodeCard
-                    key={node.id}
-                    node={node}
-                    openEvidence={openEvidence}
-                    highlighted={node.id === attribution.node_id}
-                  />
-                ))}
+                <JourneyStageNodes
+                  stage={stage}
+                  attribution={attribution}
+                  openEvidence={openEvidence}
+                />
               </div>
             </section>
           </div>

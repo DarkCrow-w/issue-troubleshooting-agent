@@ -465,7 +465,8 @@ textarea::placeholder {
   border-color: #c86d53;
   background: #fff9f7;
 }
-.journey-node strong {
+.journey-node strong,
+.journey-app strong {
   min-width: 0;
   overflow-wrap: anywhere;
   font-size: 12px;
@@ -483,6 +484,63 @@ textarea::placeholder {
   color: #9a5c4c;
   font-size: 10px;
   line-height: 1.6;
+}
+.journey-app {
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid #e8e8e8;
+  border-left: 3px solid #d4d4d4;
+  border-radius: 9px;
+  background: #fff;
+}
+.journey-app.success {
+  border-left-color: #74a582;
+}
+.journey-app.failed,
+.journey-app.highlighted {
+  border-color: #dc9c89;
+  border-left-color: #bd5e46;
+  background: #fff9f7;
+}
+.journey-app.affected,
+.journey-app.warning {
+  border-left-color: #c99a58;
+}
+.journey-app-stats {
+  display: block;
+  margin-top: 5px;
+  color: #999;
+  font-size: 10px;
+}
+.journey-app-error {
+  margin-top: 10px;
+  padding: 9px 10px;
+  border-radius: 7px;
+  background: #fff0eb;
+}
+.journey-app-error strong {
+  color: #8e4d3d;
+  font-size: 10px;
+}
+.journey-app-error p {
+  margin: 4px 0 0;
+  color: #744d43;
+  font-size: 10px;
+  line-height: 1.6;
+}
+.journey-app-evidence {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 9px;
+  padding: 5px 7px;
+  border-radius: 5px;
+  background: #f2f2f2;
+  color: #666;
+  font-size: 9px;
+}
+.journey-app-evidence:hover {
+  background: #e8e8e8;
 }
 .call-phases {
   display: grid;
