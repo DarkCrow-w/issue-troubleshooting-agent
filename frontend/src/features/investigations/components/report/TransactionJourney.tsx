@@ -61,36 +61,6 @@ function EvidenceActions({
   );
 }
 
-function ComponentSteps({ node }: { node: JourneyNode }) {
-  const components = node.components ?? [];
-  if (components.length === 0) return null;
-  const visible = components.slice(0, 6);
-  if (
-    node.failure_component &&
-    !visible.includes(node.failure_component) &&
-    components.includes(node.failure_component)
-  ) {
-    visible[visible.length - 1] = node.failure_component;
-  }
-  const hidden = components.length - visible.length;
-  return (
-    <div className="component-steps">
-      <span>内部步骤</span>
-      <div>
-        {visible.map((component) => (
-          <strong
-            className={component === node.failure_component ? "failed" : ""}
-            key={component}
-          >
-            {component}
-          </strong>
-        ))}
-        {hidden > 0 && <small>+{hidden}</small>}
-      </div>
-    </div>
-  );
-}
-
 function JourneyNodeCard({
   node,
   openEvidence,
@@ -115,7 +85,6 @@ function JourneyNodeCard({
         {node.method ? `${node.method} ` : ""}
         {node.api || "API 未识别"}
       </code>
-      <ComponentSteps node={node} />
       {node.failure_reasons.length > 0 && (
         <p>{node.failure_reasons.join("；")}</p>
       )}

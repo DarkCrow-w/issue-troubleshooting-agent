@@ -25,7 +25,6 @@ def request_response(events: list[Event], config: dict, artifacts: dict) -> dict
                     "method": event.method,
                     "direction": event.direction,
                     "peer_service": event.peer_service,
-                    "components": [],
                     "call_id": event.call_id,
                     "attempt": event.attempt,
                     "evidence_ids": [],
@@ -43,8 +42,6 @@ def request_response(events: list[Event], config: dict, artifacts: dict) -> dict
                 call["direction"] = event.direction
             if not call["peer_service"]:
                 call["peer_service"] = event.peer_service
-            if event.component and event.component not in call["components"]:
-                call["components"].append(event.component)
         else:
             orphans.append(
                 {
@@ -54,7 +51,6 @@ def request_response(events: list[Event], config: dict, artifacts: dict) -> dict
                     "method": event.method,
                     "direction": event.direction,
                     "peer_service": event.peer_service,
-                    "components": [event.component] if event.component else [],
                     "evidence_ids": [event.id],
                     "request_ids": [event.id] if event.kind == "request" else [],
                     "response_ids": [event.id] if event.kind == "response" else [],

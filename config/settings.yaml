@@ -12,10 +12,6 @@ correlation_fields:
 composite_id_services: [cm-gateway, cm-acct-scene, cm-acct-sence, comet-gateway-service]
 service_aliases: {}
 success_business_codes: ['0', '0000', 'SUCCESS']
-# Java 内部步骤提取：先读结构化字段，再从 logger/class/message 中匹配命名。
-component_fields: [component, componentName, flowName, flow, processName, className]
-component_name_patterns:
-  - '\b([A-Za-z][A-Za-z0-9_$-]{2,100}(?:Flow|Component|Handler|Processor))\b'
 topology:
   # 先按显式 service_roles 分类，再按正则分类。公司内部可在这里补充真实服务命名规则。
   service_roles: {}

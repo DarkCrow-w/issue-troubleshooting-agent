@@ -117,37 +117,6 @@ def extract_exceptions(text: str) -> list[tuple[str, str]]:
     return output
 
 
-def _short_component(value: Any) -> str:
-    """Java logger 常包含完整包名；页面只展示最后一级类名。"""
-    name = str(value or "").strip().rsplit(".", 1)[-1]
-    return name.split("$", 1)[0][:128]
-
-
-def extract_component(fields: dict, message: str, config: dict) -> str:
-    """优先读取结构化字段，再从 logger/message 中识别配置的组件命名。"""
-    component_fields = config.get("component_fields", [])
-    for field in component_fields:
-        value = fields.get(field)
-        if value not in (None, ""):
-            return _short_component(value)
-
-    search_material = " ".join(
-        str(fields.get(field) or "")
-        for field in ("logger", "loggerName", "class", "className")
-    )
-    search_material += " " + message
-    for pattern in config.get("component_name_patterns", []):
-        try:
-            match = re.search(pattern, search_material, re.IGNORECASE)
-        except re.error:
-            continue
-        if not match:
-            continue
-        value = match.group(1) if match.lastindex else match.group(0)
-        return _short_component(value)
-    return ""
-
-
 def normalize(record: dict, config: dict) -> Event:
     raw = record.get("_raw", "")
     warnings: list[str] = []
@@ -220,7 +189,6 @@ def normalize(record: dict, config: dict) -> Event:
         correlation_ids.add(root)
         ids["businessSequence"] = business_id
     message = str(fields.get("message") or raw)
-    component = extract_component(fields, message, config)
     # Java 日志框架对异常字段命名不统一。按信息完整度选择第一个非空来源，
     # message/throwable 是结构化日志里很常见的两种形式。
     exception_text = str(
@@ -295,7 +263,6 @@ def normalize(record: dict, config: dict) -> Event:
             or ""
         ),
         method=str(fields.get("IN_METHOD") or fields.get("method") or ""),
-        component=component,
         direction=str(
             fields.get("direction")
             or fields.get("callDirection")
