@@ -5,6 +5,8 @@ import re
 
 from troubleshooter.domain.models import Event
 
+from .lifecycle import analyze_call_lifecycle
+
 STAGE_META = {
     "upstream": ("上游", "请求进入 CM 前的调用方与入口数据"),
     "cm": ("CM 内部", "CM 服务内部处理与服务间调用"),
@@ -118,26 +120,13 @@ def _assign_roles(nodes: list[dict], edges: list[dict], config: dict) -> dict[st
     return roles
 
 
-def _node_status(
-    node: dict, failure_by_event: dict[str, dict]
-) -> tuple[str, list[str]]:
-    reasons = []
-    for evidence_id in node.get("evidence_ids", []):
-        failure = failure_by_event.get(evidence_id)
-        if failure:
-            reasons.extend(failure["reasons"])
-    reasons = list(dict.fromkeys(reasons))
-    if reasons:
-        return "failed", reasons
-    if node.get("missing_response") or node.get("pairing_ambiguous"):
-        return "warning", []
-    if node.get("response_ids"):
-        return "success", []
-    return "unknown", []
-
-
-def _display_node(node: dict, role: str, failure_by_event: dict[str, dict]) -> dict:
-    status, reasons = _node_status(node, failure_by_event)
+def _display_node(
+    node: dict,
+    role: str,
+    events_by_id: dict[str, Event],
+    failure_by_event: dict[str, dict],
+) -> dict:
+    lifecycle = analyze_call_lifecycle(node, events_by_id, failure_by_event)
     return {
         "id": node["id"],
         "service": node.get("service", ""),
@@ -146,8 +135,7 @@ def _display_node(node: dict, role: str, failure_by_event: dict[str, dict]) -> d
         "direction": node.get("direction", "unknown"),
         "peer_service": node.get("peer_service", ""),
         "role": role,
-        "status": status,
-        "failure_reasons": reasons,
+        **lifecycle,
         "evidence_ids": node.get("evidence_ids", []),
         "request_ids": node.get("request_ids", []),
         "response_ids": node.get("response_ids", []),
@@ -176,6 +164,19 @@ def _entry_boundary(nodes: list[dict], incoming: set[str]) -> dict | None:
         "role": "upstream",
         "status": "success" if entry["request_ids"] else "unknown",
         "failure_reasons": [],
+        "failure_phase": "",
+        "failure_phase_label": "",
+        "phases": {
+            "request": {
+                "status": "success" if entry["request_ids"] else "unknown",
+                "evidence_ids": entry["request_ids"],
+            },
+            "response": {
+                "status": "success" if entry["response_ids"] else "unknown",
+                "evidence_ids": entry["response_ids"],
+            },
+            "response_processing": {"status": "unknown", "evidence_ids": []},
+        },
         "evidence_ids": entry["request_ids"] + entry["response_ids"],
         "request_ids": entry["request_ids"],
         "response_ids": entry["response_ids"],
@@ -191,15 +192,28 @@ def _external_peer_nodes(nodes: list[dict], config: dict) -> list[dict]:
         peer = node.get("peer_service", "")
         if node["role"] != "cm" or not _is_downstream_call(node, config):
             continue
-        peers.append(
-            {
-                **node,
-                "id": f"peer-{node['id']}",
-                "service": peer or "下游服务（名称未识别）",
-                "role": "downstream",
-                "virtual": True,
+        peer_node = {
+            **node,
+            "id": f"peer-{node['id']}",
+            "service": peer or "下游服务（名称未识别）",
+            "role": "downstream",
+            "virtual": True,
+        }
+        # 响应已经成功返回时，后续异常属于调用方的本地处理。
+        # 下游虚拟节点只代表边界上的请求和响应，不能复制调用方的处理失败。
+        if node.get("failure_phase") == "response_processing":
+            response_status = node["phases"]["response"]["status"]
+            peer_node["status"] = (
+                "success" if response_status == "success" else "unknown"
+            )
+            peer_node["failure_reasons"] = []
+            peer_node["failure_phase"] = ""
+            peer_node["failure_phase_label"] = ""
+            peer_node["phases"] = {
+                **node["phases"],
+                "response_processing": {"status": "unknown", "evidence_ids": []},
             }
-        )
+        peers.append(peer_node)
     return peers
 
 
@@ -218,6 +232,8 @@ def _fault_attribution(
             "confidence": "low",
             "node_id": "",
             "evidence_ids": [],
+            "phase": "",
+            "phase_label": "",
             "caution": "未观测到失败不等同于交易成功，仍受日志覆盖范围限制。",
         }
 
@@ -233,12 +249,25 @@ def _fault_attribution(
     role = node["role"] if node else "unknown"
     domain = role
     confidence = "high" if role in ("upstream", "downstream") else "medium"
+    phase = node.get("failure_phase", "unknown") if node else "unknown"
+    phase_label = node.get("failure_phase_label", "未知阶段") if node else "未知阶段"
 
     if role == "cm" and node:
-        if _is_downstream_call(node, config):
-            domain = "downstream"
+        # 下游成功返回后再报错，故障在 CM 的响应处理逻辑中。
+        if phase == "response_processing":
+            domain = "cm"
             confidence = "high"
-            node_id = f"peer-{node['id']}"
+            node_id = node["id"]
+        elif _is_downstream_call(node, config):
+            if phase == "response":
+                domain = "downstream"
+                confidence = "high"
+                node_id = f"peer-{node['id']}"
+            else:
+                # 只有“发出请求后未收到响应”的异常，无法区分本地、网络和下游故障。
+                domain = "unknown"
+                confidence = "low"
+                node_id = node["id"]
         else:
             incoming = {edge["target"] for edge in edges}
             is_entry_input_failure = _is_upstream_input_failure(
@@ -263,12 +292,15 @@ def _fault_attribution(
     return {
         "domain": domain,
         "label": labels.get(domain, labels["unknown"]),
-        "summary": f"最早失败出现在 {earliest['service']} {earliest['api'] or '未知 API'}："
+        "summary": f"最早失败出现在 {earliest['service']} {earliest['api'] or '未知 API'}"
+        f"的{phase_label}："
         + "；".join(earliest["reasons"]),
         "confidence": confidence,
         "node_id": node_id,
         "evidence_ids": [earliest["event_id"]],
         "reasons": earliest["reasons"],
+        "phase": phase,
+        "phase_label": phase_label,
         "caution": "这里标记的是最早观测到的故障位置，不等同于最终根因。",
     }
 
@@ -320,9 +352,15 @@ def transaction_journey(events: list[Event], config: dict, artifacts: dict) -> d
     graph = artifacts["trace-reconstruction"]
     failure = artifacts["failure-localization"]
     failure_by_event = {item["event_id"]: item for item in failure["failures"]}
+    events_by_id = {event.id: event for event in events}
     roles = _assign_roles(graph["nodes"], graph["edges"], config)
     nodes = [
-        _display_node(node, roles.get(node["id"], "unknown"), failure_by_event)
+        _display_node(
+            node,
+            roles.get(node["id"], "unknown"),
+            events_by_id,
+            failure_by_event,
+        )
         for node in graph["nodes"]
     ]
     incoming = {edge["target"] for edge in graph["edges"]}

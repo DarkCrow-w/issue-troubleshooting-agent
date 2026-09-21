@@ -29,6 +29,10 @@ export type JourneyStatus =
   | "affected"
   | "warning"
   | "unknown";
+export interface JourneyPhase {
+  status: JourneyStatus;
+  evidence_ids: string[];
+}
 export interface JourneyNode {
   id: string;
   service: string;
@@ -45,6 +49,13 @@ export interface JourneyNode {
   missing_response: boolean;
   pairing_ambiguous: boolean;
   virtual: boolean;
+  failure_phase?: string;
+  failure_phase_label?: string;
+  phases?: {
+    request: JourneyPhase;
+    response: JourneyPhase;
+    response_processing: JourneyPhase;
+  };
 }
 export interface TransactionJourney {
   stages: {
@@ -62,6 +73,8 @@ export interface TransactionJourney {
     node_id: string;
     evidence_ids: string[];
     caution: string;
+    phase?: string;
+    phase_label?: string;
   };
   caution: string;
 }

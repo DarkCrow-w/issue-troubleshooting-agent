@@ -371,6 +371,19 @@ textarea::placeholder {
   font-size: 11px;
   line-height: 1.6;
 }
+.journey-direction-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  margin: -5px 0 14px;
+  color: #777;
+  font-size: 10px;
+}
+.journey-direction-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
 .journey-stages {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -470,6 +483,57 @@ textarea::placeholder {
   color: #9a5c4c;
   font-size: 10px;
   line-height: 1.6;
+}
+.call-phases {
+  display: grid;
+  gap: 5px;
+  margin-top: 10px;
+}
+.call-phase {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  width: 100%;
+  min-width: 0;
+  padding: 6px 7px;
+  border: 1px solid #ededed;
+  border-radius: 6px;
+  background: #fafafa;
+  color: #666;
+  font-size: 9px;
+  text-align: left;
+}
+button.call-phase:hover {
+  border-color: #d7d7d7;
+  background: #f5f5f5;
+}
+.call-phase.failed {
+  border-color: #e4b1a2;
+  background: #fff5f2;
+}
+.call-phase.warning {
+  border-color: #e5cfaa;
+  background: #fffaf1;
+}
+.call-phase-name {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+}
+.call-phase-status {
+  flex-shrink: 0;
+  color: #999;
+}
+.call-phase-status.success {
+  color: #4d805c;
+}
+.call-phase-status.failed {
+  color: #a55340;
+  font-weight: 600;
+}
+.call-phase-status.warning {
+  color: #9b6729;
 }
 .journey-node-actions {
   display: flex;

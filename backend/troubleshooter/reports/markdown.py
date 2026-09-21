@@ -8,6 +8,14 @@ STATUS_LABELS = {
     "unknown": "待确认",
 }
 
+PHASE_LABELS = {
+    "request": "请求发送",
+    "request_processing": "请求处理",
+    "response": "响应返回",
+    "response_processing": "响应后处理",
+    "unknown": "待确认",
+}
+
 
 def table_cell(value) -> str:
     return str(value or "—").replace("|", "\\|").replace("\n", " ")
@@ -27,8 +35,8 @@ def render_markdown(report: dict) -> str:
         "",
         attribution.get("caution", ""),
         "",
-        "| 区域 | 状态 | 服务 / API | Request 证据 | Response 证据 |",
-        "| --- | --- | --- | --- | --- |",
+        "| 区域 | 状态 | 服务 / API | 失败阶段 | Request 证据 | Response 证据 |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
     for stage in journey.get("stages", []):
         if not stage.get("nodes"):
@@ -39,6 +47,7 @@ def render_markdown(report: dict) -> str:
                         stage["label"],
                         STATUS_LABELS.get(stage["status"], stage["status"]),
                         "未观测到",
+                        "—",
                         "—",
                         "—",
                     )
@@ -52,6 +61,7 @@ def render_markdown(report: dict) -> str:
                 stage["label"],
                 STATUS_LABELS.get(node["status"], node["status"]),
                 service_api,
+                PHASE_LABELS.get(node.get("failure_phase", ""), "—"),
                 ", ".join(node.get("request_ids", [])),
                 ", ".join(node.get("response_ids", [])),
             )

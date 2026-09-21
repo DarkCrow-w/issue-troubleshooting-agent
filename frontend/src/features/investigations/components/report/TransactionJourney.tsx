@@ -1,11 +1,13 @@
 import {
   ArrowRight,
+  ArrowLeft,
   CheckCircle2,
   CircleAlert,
   CircleDashed,
   FileInput,
   FileOutput,
   Logs,
+  Settings2,
 } from "lucide-react";
 import type {
   JourneyNode,
@@ -61,6 +63,67 @@ function EvidenceActions({
   );
 }
 
+const phaseMeta = {
+  request: { label: "请求发送", icon: ArrowRight, focus: "request" as const },
+  response: { label: "响应返回", icon: ArrowLeft, focus: "response" as const },
+  response_processing: {
+    label: "响应后处理",
+    icon: Settings2,
+    focus: "raw" as const,
+  },
+};
+
+function phaseStatusLabel(phase: string, status: JourneyStatus) {
+  if (phase === "response_processing" && status === "success") return "未见异常";
+  if (status === "success") return phase === "response" ? "已返回" : "已记录";
+  if (status === "failed") return "此处报错";
+  if (status === "warning") return "证据不完整";
+  return "未观测";
+}
+
+function CallPhases({
+  node,
+  openEvidence,
+}: {
+  node: JourneyNode;
+  openEvidence: OpenEvidence;
+}) {
+  if (!node.phases) return null;
+  return (
+    <div className="call-phases" aria-label="调用生命周期">
+      {Object.entries(phaseMeta).map(([phaseId, meta]) => {
+        const phase = node.phases?.[phaseId as keyof typeof node.phases];
+        if (!phase) return null;
+        const evidenceId = phase.evidence_ids[0];
+        const Icon = meta.icon;
+        const content = (
+          <>
+            <span className="call-phase-name">
+              <Icon size={13} /> {meta.label}
+            </span>
+            <span className={`call-phase-status ${phase.status}`}>
+              {phaseStatusLabel(phaseId, phase.status)}
+            </span>
+          </>
+        );
+        return evidenceId ? (
+          <button
+            className={`call-phase ${phase.status}`}
+            key={phaseId}
+            onClick={() => openEvidence(evidenceId, meta.focus)}
+          >
+            {content}
+          </button>
+        ) : (
+          <div className={`call-phase ${phase.status}`} key={phaseId}>
+            {content}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function JourneyNodeCard({
   node,
   openEvidence,
@@ -86,11 +149,15 @@ function JourneyNodeCard({
         {node.api || "API 未识别"}
       </code>
       {node.failure_reasons.length > 0 && (
-        <p>{node.failure_reasons.join("；")}</p>
+        <p>
+          {node.failure_phase_label && `${node.failure_phase_label}：`}
+          {node.failure_reasons.join("；")}
+        </p>
       )}
       {node.missing_response && <p>已找到请求，暂未找到可配对响应</p>}
       {node.pairing_ambiguous && <p>请求/响应配对存在歧义</p>}
       {node.role === "unknown" && <p>服务角色待配置，暂列在 CM 区域</p>}
+      <CallPhases node={node} openEvidence={openEvidence} />
       <EvidenceActions node={node} openEvidence={openEvidence} />
     </article>
   );
@@ -143,6 +210,11 @@ export default function TransactionJourney({
           归因可信度：{confidenceLabels[attribution.confidence] ?? "未知"} ·{" "}
           {attribution.caution}
         </span>
+      </div>
+      <div className="journey-direction-legend">
+        <span><ArrowRight size={14} /> 请求向下游发送</span>
+        <span><ArrowLeft size={14} /> 响应向调用方返回</span>
+        <span><Settings2 size={14} /> 返回后由当前服务继续处理</span>
       </div>
       <div className="journey-stages">
         {journey.stages.map((stage, index) => (
