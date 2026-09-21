@@ -12,6 +12,19 @@ correlation_fields:
 composite_id_services: [cm-gateway, cm-acct-scene, cm-acct-sence, comet-gateway-service]
 service_aliases: {}
 success_business_codes: ['0', '0000', 'SUCCESS']
+topology:
+  # 先按显式 service_roles 分类，再按正则分类。公司内部可在这里补充真实服务命名规则。
+  service_roles: {}
+  cm_service_patterns: ['^cm-', '^comet-']
+  upstream_service_patterns: []
+  downstream_service_patterns: []
+  # 当日志没有 peerService 时，可用稳定的下游 URL 前缀识别出站调用。
+  downstream_api_patterns: []
+  # 仅在根入口调用上使用，用于区分上游数据问题与 CM 内部处理错误。
+  upstream_input_error_patterns:
+    - '(?i)validation|invalid\s+(request|parameter|field)'
+    - '(?i)missing\s+(field|parameter|required)'
+    - '参数.*(错误|缺失|非法)|校验失败|格式错误'
 cleaning:
   body_max_chars: 16000
   head_chars: 3000
@@ -24,7 +37,7 @@ cleaning:
 workflows:
   standard:
     description: 完整交易链路与故障排查
-    skills: [request-response, exception-analysis, trace-reconstruction, failure-localization, evidence-followup, diagnosis-report]
+    skills: [request-response, exception-analysis, trace-reconstruction, failure-localization, transaction-journey, evidence-followup, diagnosis-report]
   exceptions:
     description: 聚焦异常与失败原因
-    skills: [request-response, exception-analysis, trace-reconstruction, failure-localization, diagnosis-report]
+    skills: [request-response, exception-analysis, trace-reconstruction, failure-localization, transaction-journey, diagnosis-report]

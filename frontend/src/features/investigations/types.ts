@@ -18,6 +18,52 @@ export interface CallNode {
   missing_response?: boolean;
   pairing_ambiguous?: boolean;
   attempt?: string;
+  request_ids?: string[];
+  response_ids?: string[];
+}
+export type EvidenceFocus = "request" | "response" | "raw";
+export type OpenEvidence = (id: string, focus?: EvidenceFocus) => void;
+export type JourneyStatus =
+  | "success"
+  | "failed"
+  | "affected"
+  | "warning"
+  | "unknown";
+export interface JourneyNode {
+  id: string;
+  service: string;
+  api: string;
+  method: string;
+  direction: string;
+  peer_service: string;
+  role: "upstream" | "cm" | "downstream" | "unknown";
+  status: JourneyStatus;
+  failure_reasons: string[];
+  evidence_ids: string[];
+  request_ids: string[];
+  response_ids: string[];
+  missing_response: boolean;
+  pairing_ambiguous: boolean;
+  virtual: boolean;
+}
+export interface TransactionJourney {
+  stages: {
+    id: "upstream" | "cm" | "downstream";
+    label: string;
+    description: string;
+    status: JourneyStatus;
+    nodes: JourneyNode[];
+  }[];
+  attribution: {
+    domain: "upstream" | "cm" | "downstream" | "none" | "unknown";
+    label: string;
+    summary: string;
+    confidence: string;
+    node_id: string;
+    evidence_ids: string[];
+    caution: string;
+  };
+  caution: string;
 }
 export interface Report {
   summary: string;
@@ -39,6 +85,7 @@ export interface Report {
       kind: string;
     }[];
   };
+  journey: TransactionJourney;
   findings: Claim[];
   hypotheses: Claim[];
   earliest_observed_failure: {

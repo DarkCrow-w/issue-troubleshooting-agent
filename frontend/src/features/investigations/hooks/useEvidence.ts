@@ -1,10 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../../shared/http";
+import type { EvidenceFocus } from "../types";
 
 export interface EvidenceView {
   id: string;
   data?: unknown;
   error?: string;
+  focus: EvidenceFocus;
 }
 
 export function useEvidence(taskId: string | null) {
@@ -25,16 +27,16 @@ export function useEvidence(taskId: string | null) {
     return () => window.removeEventListener("keydown", close);
   }, [closeEvidence]);
 
-  async function openEvidence(id: string) {
+  async function openEvidence(id: string, focus: EvidenceFocus = "raw") {
     // 用户快速切换证据时，只接受最后一次点击对应的响应。
     const request = ++evidenceRequest.current;
-    setEvidence({ id });
+    setEvidence({ id, focus });
     try {
       const data = await api(`/investigations/${taskId}/evidence/${id}`);
-      if (request === evidenceRequest.current) setEvidence({ id, data });
+      if (request === evidenceRequest.current) setEvidence({ id, focus, data });
     } catch (error) {
       if (request === evidenceRequest.current)
-        setEvidence({ id, error: (error as Error).message });
+        setEvidence({ id, focus, error: (error as Error).message });
     }
   }
 

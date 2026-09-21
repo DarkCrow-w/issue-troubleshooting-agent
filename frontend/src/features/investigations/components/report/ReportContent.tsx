@@ -3,7 +3,8 @@ import { ChevronRight } from "lucide-react";
 import CallGraph from "../CallGraph";
 import DiagnosisView from "./DiagnosisView";
 import ExecutionDetails from "./ExecutionDetails";
-import type { Report, Task } from "../../types";
+import TransactionJourney from "./TransactionJourney";
+import type { OpenEvidence, Report, Task } from "../../types";
 
 const tabs = [
   { id: "diagnosis", title: "诊断结论" },
@@ -15,7 +16,7 @@ type Tab = (typeof tabs)[number]["id"];
 type Props = {
   report: Report;
   usage: Task["usage"];
-  openEvidence: (id: string) => void;
+  openEvidence: OpenEvidence;
 };
 
 function Timeline({
@@ -100,6 +101,14 @@ export default function ReportContent(props: Props) {
   const [tab, setTab] = useState<Tab>("diagnosis");
   return (
     <>
+      <TransactionJourney
+        journey={props.report.journey}
+        openEvidence={props.openEvidence}
+      />
+      <div className="details-title">
+        <span className="eyebrow">DETAILED ANALYSIS</span>
+        <h3>详细分析</h3>
+      </div>
       <div className="tabs">
         {tabs.map(({ id, title }) => (
           <button

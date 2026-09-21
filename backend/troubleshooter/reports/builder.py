@@ -9,7 +9,12 @@ def build_report(state: InvestigationState) -> dict:
     failure = state["artifacts"].get("failure-localization", {})
     failures = failure.get("failures", [])
     graph = state["artifacts"].get(
-        "trace-reconstruction", {"nodes": [], "edges": [], "timeline": [], "services": []}
+        "trace-reconstruction",
+        {"nodes": [], "edges": [], "timeline": [], "services": []},
+    )
+    journey = state["artifacts"].get(
+        "transaction-journey",
+        {"stages": [], "attribution": {}, "caution": "交易链路尚未生成"},
     )
     findings, hypotheses, unknowns, next_steps = [], [], [], []
     for diagnosis in state["diagnoses"]:
@@ -31,7 +36,9 @@ def build_report(state: InvestigationState) -> dict:
             next_steps.append("检查失败事件的完整异常链和下游响应，验证根因假设")
     for node in graph["nodes"]:
         if node.get("missing_response"):
-            unknowns.append(f"{node['service']} {node['api']} 未找到可配对响应（{node['id']}）")
+            unknowns.append(
+                f"{node['service']} {node['api']} 未找到可配对响应（{node['id']}）"
+            )
     if len(graph["services"]) > 1 and not graph["edges"]:
         unknowns.append("日志覆盖多个服务，但缺少足够证据建立调用关系")
     summaries = [d.summary for d in state["diagnoses"]]
@@ -47,6 +54,7 @@ def build_report(state: InvestigationState) -> dict:
     report = {
         "summary": summary,
         "graph": graph,
+        "journey": journey,
         "findings": findings,
         "hypotheses": hypotheses,
         "earliest_observed_failure": failure.get("earliest_observed_failure"),

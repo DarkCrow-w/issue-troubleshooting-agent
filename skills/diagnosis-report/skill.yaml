@@ -4,7 +4,7 @@
   "description": "生成证据化诊断报告",
   "kind": "report",
   "depends_on": [
-    "failure-localization"
+    "transaction-journey"
   ],
   "handler": "",
   "tools": [

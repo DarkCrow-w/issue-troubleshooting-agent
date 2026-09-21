@@ -12,7 +12,7 @@ backend/troubleshooter/
   investigation/   LangGraph 流程、预算、补查与分块分析
   logs/            Splunk 查询、标准化和可选日志清洗
   models/          所有模型调用、LangChain adapter、prompt 与输出校验
-  analysis/        请求响应、Java 异常、调用链和失败规则
+  analysis/        请求响应、Java 异常、三段交易链路和故障域规则
   persistence/     PostgreSQL 任务与原始证据
   reports/         报告与 Markdown 输出
 frontend/src/      React 极简排查页面
@@ -51,6 +51,26 @@ environments:
 ```
 
 `.env` 中的连接名称必须覆盖这里的所有环境名称。前端环境下拉框来自这里；后端收到查询后，会使用同名的 Splunk 连接和 index 白名单。请同时按实际日志调整 `correlation_fields`、服务别名、复合 ID 服务和成功业务码。
+
+链路首屏固定按“上游 → CM 内部 → 下游”展示。请在 `config/settings.yaml` 的
+`topology` 中补充公司服务命名规则，显式映射优先于正则：
+
+```yaml
+topology:
+  service_roles:
+    teller-channel: upstream
+    core-banking: downstream
+  cm_service_patterns: ['^cm-', '^comet-']
+  upstream_service_patterns: ['^channel-']
+  downstream_service_patterns: ['^core-', '^host-']
+  # 日志缺少 peerService 时，可按稳定的下游 URL 前缀识别。
+  downstream_api_patterns: ['^/core-banking/', '^/host-api/']
+  # 只在入口根调用上匹配，用于识别上游参数或格式错误。
+  upstream_input_error_patterns: ['(?i)validation|invalid parameter', '参数.*错误']
+```
+
+无法根据配置或明确调用边分类的服务会标为“服务角色待配置”，不会默认判定为
+上游或下游。修改这些规则不需要改代码，也不会改变原始证据。
 
 4. 构建并启动：
 

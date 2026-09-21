@@ -1,0 +1,13 @@
+{
+  "id": "transaction-journey",
+  "version": "1.0.0",
+  "description": "将调用事实整理为上游、CM 内部、下游三段链路并标记故障域",
+  "kind": "code",
+  "depends_on": [
+    "failure-localization"
+  ],
+  "handler": "transaction_journey",
+  "tools": [],
+  "input": "events-and-artifacts",
+  "output": "artifact"
+}

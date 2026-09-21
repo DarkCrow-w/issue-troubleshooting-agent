@@ -1,23 +1,81 @@
 """Human-readable export of the same evidence-backed report shown in the UI."""
 
+STATUS_LABELS = {
+    "success": "正常",
+    "failed": "发现错误",
+    "affected": "受错误影响",
+    "warning": "证据不完整",
+    "unknown": "待确认",
+}
+
 
 def table_cell(value) -> str:
     return str(value or "—").replace("|", "\\|").replace("\n", " ")
 
 
 def render_markdown(report: dict) -> str:
+    journey = report.get("journey", {})
+    attribution = journey.get("attribution", {})
     lines = [
         "# 交易排查报告",
         "",
-        report["summary"],
+        "## 交易链路定位",
         "",
-        "## 服务与 API",
+        f"**故障区域：{attribution.get('label', '待确认')}**",
         "",
-        "| 调用实例 | 服务 | API | 证据 |",
-        "| --- | --- | --- | --- |",
+        attribution.get("summary", "尚未生成链路定位结果。"),
+        "",
+        attribution.get("caution", ""),
+        "",
+        "| 区域 | 状态 | 服务 / API | Request 证据 | Response 证据 |",
+        "| --- | --- | --- | --- | --- |",
     ]
+    for stage in journey.get("stages", []):
+        if not stage.get("nodes"):
+            lines.append(
+                "| "
+                + " | ".join(
+                    (
+                        stage["label"],
+                        STATUS_LABELS.get(stage["status"], stage["status"]),
+                        "未观测到",
+                        "—",
+                        "—",
+                    )
+                )
+                + " |"
+            )
+            continue
+        for node in stage["nodes"]:
+            service_api = f"{node['service']} · {node.get('api') or 'API 未知'}"
+            cells = (
+                stage["label"],
+                STATUS_LABELS.get(node["status"], node["status"]),
+                service_api,
+                ", ".join(node.get("request_ids", [])),
+                ", ".join(node.get("response_ids", [])),
+            )
+            lines.append("| " + " | ".join(table_cell(cell) for cell in cells) + " |")
+    lines.extend(
+        [
+            "",
+            "## 详细分析",
+            "",
+            report["summary"],
+            "",
+            "## 服务与 API",
+            "",
+            "| 调用实例 | 服务 | API | 证据 |",
+            "| --- | --- | --- | --- |",
+        ]
+    )
     for node in report["graph"]["nodes"]:
-        cells = (node["id"], node["service"], node["api"], ", ".join(node["evidence_ids"]))
+        cells = (
+            node["id"],
+            node["service"],
+            node["api"],
+            ", ".join(node["evidence_ids"]),
+        )
         lines.append("| " + " | ".join(table_cell(cell) for cell in cells) + " |")
     lines.extend(["", "## 调用关系", ""])
     if not report["graph"]["edges"]:
@@ -42,7 +100,8 @@ def render_markdown(report: dict) -> str:
         )
     lines.extend(["", "## 观测事实", ""])
     lines.extend(
-        f"- {f['statement']}（证据：{', '.join(f['evidence_ids'])}）" for f in report["findings"]
+        f"- {f['statement']}（证据：{', '.join(f['evidence_ids'])}）"
+        for f in report["findings"]
     )
     for title, key in (
         ("根因假设", "hypotheses"),
@@ -58,19 +117,28 @@ def render_markdown(report: dict) -> str:
                     f"- {item['statement']}（{item['confidence']}；证据：{', '.join(item['evidence_ids'])}）"
                 )
                 if item.get("counter_evidence_ids"):
-                    lines.append("  反对证据：" + ", ".join(item["counter_evidence_ids"]))
+                    lines.append(
+                        "  反对证据：" + ", ".join(item["counter_evidence_ids"])
+                    )
                 if item.get("verification"):
                     lines.append("  验证方式：" + item["verification"])
             else:
                 lines.append("- " + item)
     lines.extend(
-        ["", "## 日志时间线", "", "| 时间 | 服务 | 类型 | 证据 |", "| --- | --- | --- | --- |"]
+        [
+            "",
+            "## 日志时间线",
+            "",
+            "| 时间 | 服务 | 类型 | 证据 |",
+            "| --- | --- | --- | --- |",
+        ]
     )
     for event in report["graph"]["timeline"]:
         lines.append(
             "| "
             + " | ".join(
-                table_cell(event[key]) for key in ("timestamp", "service", "kind", "event_id")
+                table_cell(event[key])
+                for key in ("timestamp", "service", "kind", "event_id")
             )
             + " |"
         )

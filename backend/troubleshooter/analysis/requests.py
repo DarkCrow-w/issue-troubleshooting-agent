@@ -22,6 +22,9 @@ def request_response(events: list[Event], config: dict, artifacts: dict) -> dict
                     "id": event.id,
                     "service": event.service,
                     "api": event.api,
+                    "method": event.method,
+                    "direction": event.direction,
+                    "peer_service": event.peer_service,
                     "call_id": event.call_id,
                     "attempt": event.attempt,
                     "evidence_ids": [],
@@ -33,12 +36,21 @@ def request_response(events: list[Event], config: dict, artifacts: dict) -> dict
             call[f"{event.kind}_ids"].append(event.id)
             if not call["api"]:
                 call["api"] = event.api
+            if not call["method"]:
+                call["method"] = event.method
+            if call["direction"] == "unknown" and event.direction != "unknown":
+                call["direction"] = event.direction
+            if not call["peer_service"]:
+                call["peer_service"] = event.peer_service
         else:
             orphans.append(
                 {
                     "id": event.id,
                     "service": event.service,
                     "api": event.api,
+                    "method": event.method,
+                    "direction": event.direction,
+                    "peer_service": event.peer_service,
                     "evidence_ids": [event.id],
                     "request_ids": [event.id] if event.kind == "request" else [],
                     "response_ids": [event.id] if event.kind == "response" else [],
@@ -47,6 +59,10 @@ def request_response(events: list[Event], config: dict, artifacts: dict) -> dict
             )
     nodes = list(calls.values()) + orphans
     for node in nodes:
-        node["missing_response"] = bool(node["request_ids"] and not node["response_ids"])
-        node["pairing_ambiguous"] = len(node["request_ids"]) > 1 or len(node["response_ids"]) > 1
+        node["missing_response"] = bool(
+            node["request_ids"] and not node["response_ids"]
+        )
+        node["pairing_ambiguous"] = (
+            len(node["request_ids"]) > 1 or len(node["response_ids"]) > 1
+        )
     return {"calls": nodes}

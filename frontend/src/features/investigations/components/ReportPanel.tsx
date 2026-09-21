@@ -1,6 +1,6 @@
 import { FileDown, LoaderCircle, Square } from "lucide-react";
 import ReportContent from "./report/ReportContent";
-import type { Task } from "../types";
+import type { OpenEvidence, Task } from "../types";
 
 const statusLabels: Record<string, string> = {
   queued: "排队中",
@@ -15,7 +15,7 @@ type Props = {
   task: Task | null;
   taskId: string;
   busy: boolean;
-  openEvidence: (id: string) => void;
+  openEvidence: OpenEvidence;
   onCancel: () => void;
 };
 

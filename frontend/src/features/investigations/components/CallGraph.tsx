@@ -1,5 +1,5 @@
 import { ArrowDownRight, CornerDownRight, ExternalLink } from "lucide-react";
-import type { CallNode, Report } from "../types";
+import type { CallNode, OpenEvidence, Report } from "../types";
 
 function CallCard({
   node,
@@ -8,7 +8,7 @@ function CallCard({
 }: {
   node: CallNode;
   index: number;
-  openEvidence: (id: string) => void;
+  openEvidence: OpenEvidence;
 }) {
   return (
     <button
@@ -36,7 +36,7 @@ function CallEdges({
   openEvidence,
 }: {
   graph: Report["graph"];
-  openEvidence: (id: string) => void;
+  openEvidence: OpenEvidence;
 }) {
   if (!graph.edges.length)
     return (
@@ -68,7 +68,7 @@ export default function CallGraph({
   openEvidence,
 }: {
   graph: Report["graph"];
-  openEvidence: (id: string) => void;
+  openEvidence: OpenEvidence;
 }) {
   return (
     <div className="call-graph">

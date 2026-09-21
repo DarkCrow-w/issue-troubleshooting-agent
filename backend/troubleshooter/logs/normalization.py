@@ -32,7 +32,9 @@ def decode_payload(value: Any, warnings: list[str]) -> Any:
         return value
     decoded = value
     for _ in range(3):
-        if not isinstance(decoded, str) or not decoded.lstrip().startswith(("{", "[", '"')):
+        if not isinstance(decoded, str) or not decoded.lstrip().startswith(
+            ("{", "[", '"')
+        ):
             break
         try:
             decoded = json.loads(decoded)
@@ -124,13 +126,19 @@ def normalize(record: dict, config: dict) -> Event:
         try:
             raw_fields = json.loads(raw)
             if isinstance(raw_fields, dict):
-                conflicts = [k for k in raw_fields if k in fields and fields[k] != raw_fields[k]]
+                conflicts = [
+                    k for k in raw_fields if k in fields and fields[k] != raw_fields[k]
+                ]
                 if conflicts:
-                    warnings.append("提取字段与 _raw 冲突，优先提取字段：" + ", ".join(conflicts))
+                    warnings.append(
+                        "提取字段与 _raw 冲突，优先提取字段：" + ", ".join(conflicts)
+                    )
                 fields = {**raw_fields, **fields}
         except json.JSONDecodeError:
             warnings.append("_raw JSON 无法解析，已保留原文")
-    service = str(fields.get("appName") or fields.get("app") or fields.get("service") or "unknown")
+    service = str(
+        fields.get("appName") or fields.get("app") or fields.get("service") or "unknown"
+    )
     service = config.get("service_aliases", {}).get(service, service)
     request = next(
         (
@@ -162,7 +170,11 @@ def normalize(record: dict, config: dict) -> Event:
     for key, value in (
         list(walk_fields(request)) + list(walk_fields(response)) + list(fields.items())
     ):
-        if key in id_fields and isinstance(value, (str, int)) and str(value) not in ("", "<null>"):
+        if (
+            key in id_fields
+            and isinstance(value, (str, int))
+            and str(value) not in ("", "<null>")
+        ):
             ids[key] = str(value)
     for key in id_fields:
         if key not in ids and isinstance(raw, str):
@@ -170,7 +182,9 @@ def normalize(record: dict, config: dict) -> Event:
             if match:
                 ids[key] = match.group(1)
     correlation_ids = {ids[k] for k in config["correlation_fields"] if k in ids}
-    if service in config.get("composite_id_services", []) and ":" in ids.get("seqNo", ""):
+    if service in config.get("composite_id_services", []) and ":" in ids.get(
+        "seqNo", ""
+    ):
         root, business_id = ids["seqNo"].split(":", 1)
         correlation_ids.add(root)
         ids["businessSequence"] = business_id
@@ -190,37 +204,50 @@ def normalize(record: dict, config: dict) -> Event:
         exception = {
             "type": matches[0][0],
             "message": matches[0][1],
-            "causes": [{"type": kind, "message": message} for kind, message in matches[1:]],
+            "causes": [
+                {"type": kind, "message": message} for kind, message in matches[1:]
+            ],
             "stack": exception_text,
         }
     kind = str(fields.get("eventType", "")).lower()
     if kind not in ("request", "response", "exception"):
         if exception:
             kind = "exception"
-        elif response is not None or re.search(r"\bresponse\b", message, re.I):
+        elif response is not None or re.search(r"\bresponse\b", message, re.IGNORECASE):
             kind = "response"
-        elif request is not None or re.search(r"\brequest\b", message, re.I):
+        elif request is not None or re.search(r"\brequest\b", message, re.IGNORECASE):
             kind = "request"
         else:
             kind = "log"
     status = parse_http_status(
-        fields.get("httpStatus", fields.get("statusCode", fields.get("status"))), warnings
+        fields.get("httpStatus", fields.get("statusCode", fields.get("status"))),
+        warnings,
     )
     business_code = fields.get("businessCode", fields.get("errorCode"))
     if business_code is None:
         business_code = next(
-            (v for k, v in walk_fields(response) if k in ("code", "returnCode", "errorCode")), None
+            (
+                v
+                for k, v in walk_fields(response)
+                if k in ("code", "returnCode", "errorCode")
+            ),
+            None,
         )
     timestamp = normalize_time(fields.get("_time", fields.get("timestamp")))
     if not timestamp:
         warnings.append("事件缺少时间")
     if record.get("_cd"):
         identity = {
-            key: record.get(key) for key in ("index", "_bkt", "_cd", "source", "_time", "_raw")
+            key: record.get(key)
+            for key in ("index", "_bkt", "_cd", "source", "_time", "_raw")
         }
     else:
-        identity = {key: value for key, value in record.items() if key not in ("_serial", "_si")}
-    stable_content = json.dumps(identity, sort_keys=True, ensure_ascii=False, default=str)
+        identity = {
+            key: value for key, value in record.items() if key not in ("_serial", "_si")
+        }
+    stable_content = json.dumps(
+        identity, sort_keys=True, ensure_ascii=False, default=str
+    )
     event_id = "ev_" + hashlib.sha256(stable_content.encode()).hexdigest()[:16]
     return Event(
         id=event_id,
@@ -236,7 +263,12 @@ def normalize(record: dict, config: dict) -> Event:
             or ""
         ),
         method=str(fields.get("IN_METHOD") or fields.get("method") or ""),
-        direction=str(fields.get("direction", "unknown")).lower(),
+        direction=str(
+            fields.get("direction")
+            or fields.get("callDirection")
+            or fields.get("logDirection")
+            or "unknown"
+        ).lower(),
         kind=kind,
         level=str(fields.get("level", "")).upper(),
         message=message,
@@ -245,12 +277,22 @@ def normalize(record: dict, config: dict) -> Event:
         http_status=status,
         business_code=str(business_code) if business_code is not None else None,
         exception=exception,
-        peer_service=str(fields.get("peerService", "")),
+        peer_service=str(
+            fields.get("peerService")
+            or fields.get("peer_service")
+            or fields.get("targetService")
+            or fields.get("downstreamService")
+            or ""
+        ),
         call_id=str(fields.get("callId") or fields.get("spanId") or ""),
-        parent_call_id=str(fields.get("parentCallId") or fields.get("parentSpanId") or ""),
+        parent_call_id=str(
+            fields.get("parentCallId") or fields.get("parentSpanId") or ""
+        ),
         attempt=str(fields.get("attempt") or fields.get("x_envoy_attempt_count") or ""),
         source={
-            k: fields[k] for k in ("index", "source", "sourcetype", "_cd", "_bkt") if k in fields
+            k: fields[k]
+            for k in ("index", "source", "sourcetype", "_cd", "_bkt")
+            if k in fields
         },
         parse_warnings=warnings,
     )

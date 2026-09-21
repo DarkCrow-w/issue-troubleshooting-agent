@@ -1,7 +1,5 @@
 import { Check, ChevronRight, CircleHelp } from "lucide-react";
-import type { Claim, Report } from "../../types";
-
-type OpenEvidence = (id: string) => void;
+import type { Claim, OpenEvidence, Report } from "../../types";
 const confidenceLabels: Record<string, string> = {
   high: "高",
   medium: "中",
