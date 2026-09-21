@@ -788,7 +788,6 @@ li + li {
   margin-bottom: 20px;
   flex-wrap: wrap;
 }
-.dot,
 .event-dot {
   width: 7px;
   height: 7px;
@@ -805,26 +804,99 @@ li + li {
 .dashed-line {
   border-top-style: dashed;
 }
-.node-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
+.graph-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 0 14px;
+  color: #222;
+  font-size: 12px;
+}
+.graph-summary span {
+  color: #999;
+}
+.state-swatch {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-left: 10px;
+}
+.state-swatch.failed {
+  background: #c84b4b;
+}
+.state-swatch.affected {
+  background: #d08a32;
+}
+.call-tree {
+  overflow-x: auto;
+  padding: 2px 2px 10px;
+}
+.call-tree ul {
+  list-style: none;
+  margin: 0;
+}
+.call-tree-roots {
+  min-width: 520px;
+  padding: 0;
+}
+.call-tree-children {
+  margin-left: 24px !important;
+  padding-left: 30px;
+  border-left: 1px solid #ddd;
+}
+.call-tree-item {
+  position: relative;
+  padding: 7px 0;
+}
+.call-tree-children > .call-tree-item::before {
+  content: "";
+  position: absolute;
+  top: 33px;
+  left: -30px;
+  width: 30px;
+  border-top: 1px solid #bbb;
+}
+.call-tree-children > .call-tree-item.inferred::before {
+  border-top-style: dashed;
+}
+.edge-kind {
+  position: absolute;
+  z-index: 1;
+  top: 22px;
+  left: -26px;
+  padding: 1px 3px;
+  background: #fff;
+  color: #aaa;
+  font-size: 9px;
 }
 .call-node {
-  display: flex;
-  align-items: start;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
   text-align: left;
-  gap: 10px;
+  gap: 12px;
+  width: min(100%, 680px);
   border: 1px solid #e5e5e5;
   border-radius: 12px;
-  padding: 15px;
+  padding: 13px 14px;
   min-width: 0;
+  background: #fff;
 }
 .call-node:hover {
   background: #f8f8f8;
 }
-.call-node > div {
-  flex: 1;
+.call-node.failed {
+  border-color: #e5b4b4;
+  background: #fffafa;
+}
+.call-node.affected {
+  border-color: #e7cfaa;
+  background: #fffcf6;
+}
+.call-node.warning {
+  border-style: dashed;
+}
+.call-node-copy {
   min-width: 0;
 }
 .call-node strong {
@@ -837,8 +909,8 @@ li + li {
   overflow-wrap: anywhere;
   margin: 8px 0;
 }
-.call-node small,
-.node-number {
+.call-node small {
+  display: block;
   font-size: 11px;
   color: #999;
 }
@@ -846,36 +918,47 @@ li + li {
   color: #999;
   flex-shrink: 0;
 }
-.edges {
-  margin-top: 20px;
-}
-.edge {
-  display: flex;
-  flex-wrap: wrap;
+.node-state {
+  display: inline-flex;
   align-items: center;
-  gap: 10px;
-  padding: 14px 0;
-  border-bottom: 1px solid #eee;
+  gap: 5px;
+  min-width: 58px;
+  font-size: 10px;
+  color: #888;
+}
+.node-state.failed {
+  color: #b43b3b;
+}
+.node-state.affected {
+  color: #b67422;
+}
+.node-state.success {
+  color: #3e8061;
+}
+.extra-relations {
+  margin-top: 18px;
+  padding-top: 16px;
+  border-top: 1px solid #eee;
+}
+.extra-relations > strong {
   font-size: 12px;
 }
-.edge > span {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.edge button {
-  font-size: 11px;
-  background: #f5f5f5;
-  padding: 4px 7px;
-  border-radius: 5px;
-}
-.edge.inferred button {
-  border: 1px dashed #bbb;
-}
-.edge small {
-  width: 100%;
+.extra-relations > p {
+  margin: 5px 0 10px;
   color: #999;
   font-size: 11px;
+}
+.extra-relations button {
+  display: block;
+  width: 100%;
+  padding: 9px 0;
+  text-align: left;
+  font-size: 11px;
+}
+.extra-relations small {
+  display: block;
+  margin-top: 3px;
+  color: #999;
 }
 .timeline button {
   display: flex;
@@ -1097,8 +1180,8 @@ li + li {
     padding: 5px;
     font-size: 10px;
   }
-  .node-grid {
-    grid-template-columns: 1fr;
+  .call-tree-roots {
+    min-width: 460px;
   }
   .journey-stages {
     grid-template-columns: 1fr;

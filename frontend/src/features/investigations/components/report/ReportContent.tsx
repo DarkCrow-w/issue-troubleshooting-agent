@@ -63,7 +63,13 @@ function ActiveView({
   // 一个明确分支只负责选择一个视图，避免在主 return 中堆叠多个判断和大片 JSX。
   switch (tab) {
     case "chain":
-      return <CallGraph graph={report.graph} openEvidence={openEvidence} />;
+      return (
+        <CallGraph
+          graph={report.graph}
+          journey={report.journey}
+          openEvidence={openEvidence}
+        />
+      );
     case "timeline":
       return (
         <Timeline events={report.graph.timeline} openEvidence={openEvidence} />

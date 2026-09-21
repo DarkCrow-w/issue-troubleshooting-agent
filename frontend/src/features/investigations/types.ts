@@ -14,6 +14,7 @@ export interface CallNode {
   id: string;
   service: string;
   api: string;
+  direction?: string;
   evidence_ids: string[];
   missing_response?: boolean;
   pairing_ambiguous?: boolean;
