@@ -21,8 +21,10 @@ export default function InvestigationForm({ config, busy, onSubmit }: Props) {
     endTime: "",
     spl: "",
     cleaning: true,
+    followup: false,
   });
-  const { environment, workflow, startTime, endTime, spl, cleaning } = settings;
+  const { environment, workflow, startTime, endTime, spl, cleaning, followup } =
+    settings;
   function updateSettings(patch: Partial<SearchSettings>) {
     setSettings((current) => ({ ...current, ...patch }));
   }
@@ -47,6 +49,7 @@ export default function InvestigationForm({ config, busy, onSubmit }: Props) {
       start_time: startTime ? `${startTime}:00+08:00` : null,
       end_time: endTime ? `${endTime}:00+08:00` : null,
       cleaning_enabled: cleaning,
+      followup_enabled: followup,
       question,
     });
   }

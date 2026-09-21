@@ -218,12 +218,13 @@ curl http://127.0.0.1:8000/health
   "start_time": null,
   "end_time": null,
   "cleaning_enabled": true,
+  "followup_enabled": false,
   "workflow": "standard",
   "question": "定位最早失败步骤和原因"
 }
 ```
 
-`correlation_id` 与 `spl` 至少填写一个。时间可以全部留空，也可以只设置一侧边界。自定义 SPL 会自动叠加所选环境允许的 index；系统拒绝子搜索、写入和跨源查询命令。
+`correlation_id` 与 `spl` 至少填写一个。时间可以全部留空，也可以只设置一侧边界。`followup_enabled` 默认是 `false`；开启后，Agent 才会根据首次查询证据继续补查 Splunk。自定义 SPL 会自动叠加所选环境允许的 index；系统拒绝子搜索、写入和跨源查询命令。
 
 其他接口：
 

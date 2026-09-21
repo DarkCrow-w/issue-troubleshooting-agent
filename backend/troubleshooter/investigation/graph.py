@@ -1,7 +1,7 @@
 """The investigation flow is explicit here; nodes contain no hidden orchestration loops."""
 
+from collections.abc import Callable
 from functools import partial
-from typing import Callable
 
 from langgraph.graph import END, START, StateGraph
 
@@ -73,13 +73,16 @@ def build_graph(
         builder.add_node(name, partial(execute_code_skill, skill=skill, domain_config=config))
         builder.add_edge(previous, name)
         previous = name
-    builder.add_node("plan_followup", plan)
-    builder.add_edge(previous, "plan_followup")
-    builder.add_conditional_edges(
-        "plan_followup",
-        lambda state: "retrieve" if state["next_query"] else "prepare_analysis",
-        {"retrieve": "retrieve", "prepare_analysis": "prepare_analysis"},
-    )
+    if request.followup_enabled:
+        builder.add_node("plan_followup", plan)
+        builder.add_edge(previous, "plan_followup")
+        builder.add_conditional_edges(
+            "plan_followup",
+            lambda state: "retrieve" if state["next_query"] else "prepare_analysis",
+            {"retrieve": "retrieve", "prepare_analysis": "prepare_analysis"},
+        )
+    else:
+        builder.add_edge(previous, "prepare_analysis")
     builder.add_node("prepare_analysis", prepare)
     builder.add_conditional_edges(
         "prepare_analysis", after_prepare, {"analyse_chunk": "analyse_chunk", "report": "report"}

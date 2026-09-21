@@ -84,9 +84,10 @@ class InvestigationService:
 
         graph = build_graph(request, self.config, skills, budget, collector, planner, models, phase)
         # 业务预算控制实际查询次数；图递归上限额外防止错误连边造成死循环。
+        followup_rounds = self.settings.max_followups if request.followup_enabled else 0
         recursion_limit = (
             30
-            + (len(skills) + 3) * (self.settings.max_followups + 1)
+            + (len(skills) + 3) * (followup_rounds + 1)
             + 4 * self.settings.max_model_calls
         )
         try:

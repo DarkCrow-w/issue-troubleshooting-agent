@@ -137,5 +137,6 @@ export interface InvestigationRequest {
   start_time: string | null;
   end_time: string | null;
   cleaning_enabled: boolean;
+  followup_enabled: boolean;
   question: string;
 }

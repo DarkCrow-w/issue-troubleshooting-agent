@@ -8,6 +8,7 @@ export interface SearchSettings {
   endTime: string;
   spl: string;
   cleaning: boolean;
+  followup: boolean;
 }
 
 // 这里只负责编辑设置；请求转换与提交由外层表单负责。
@@ -20,7 +21,8 @@ export default function InvestigationSettings({
   value: SearchSettings;
   onChange: (patch: Partial<SearchSettings>) => void;
 }) {
-  const { environment, workflow, startTime, endTime, spl, cleaning } = value;
+  const { environment, workflow, startTime, endTime, spl, cleaning, followup } =
+    value;
   return (
     <details className="settings">
       <summary>
@@ -90,6 +92,14 @@ export default function InvestigationSettings({
             onChange={(e) => onChange({ cleaning: e.target.checked })}
           />
           日志清洗<span>减少冗余，保留证据</span>
+        </label>
+        <label className="cleaning-option">
+          <input
+            type="checkbox"
+            checked={followup}
+            onChange={(e) => onChange({ followup: e.target.checked })}
+          />
+          自动补查<span>根据已有证据继续查询 Splunk，默认关闭</span>
         </label>
       </div>
     </details>

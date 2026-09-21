@@ -4,7 +4,11 @@ from datetime import datetime, timedelta
 
 from troubleshooter.analysis import time_key
 from troubleshooter.domain.errors import ModelUnavailable
-from troubleshooter.domain.models import FollowupProposal, InvestigationRequest, QuerySpec
+from troubleshooter.domain.models import (
+    FollowupProposal,
+    InvestigationRequest,
+    QuerySpec,
+)
 from troubleshooter.models import ModelCallInterface
 from troubleshooter.skills import Skill
 
@@ -90,6 +94,9 @@ class FollowupPlanner:
         self.request, self.skill, self.model, self.budget = request, skill, model, budget
 
     async def plan(self, state: InvestigationState) -> dict:
+        # 补查必须由用户主动开启；默认只分析首次查询返回的日志。
+        if not self.request.followup_enabled:
+            return {"next_query": None}
         if not self.skill or "propose_followup" not in self.skill.tools:
             return {"next_query": None}
         warnings = list(state["warnings"])

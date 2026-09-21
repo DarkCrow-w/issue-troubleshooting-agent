@@ -11,6 +11,7 @@ class InvestigationRequest(BaseModel):
     start_time: datetime | None = None
     end_time: datetime | None = None
     cleaning_enabled: bool = True
+    followup_enabled: bool = False
     workflow: str = "standard"
     question: str = Field(default="", max_length=2000)
 
