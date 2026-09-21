@@ -169,7 +169,7 @@ interface CmAppSummary {
   apiCount: number;
   callCount: number;
   reasons: string[];
-  evidenceId?: string;
+  primaryNode: JourneyNode;
   isFaultApp: boolean;
 }
 
@@ -231,7 +231,7 @@ function summarizeCmApps(
         }),
       ),
     );
-    const evidenceNode =
+    const primaryNode =
       orderedNodes.find((node) => node.failure_reasons.length > 0) ?? orderedNodes[0];
 
     return {
@@ -240,7 +240,7 @@ function summarizeCmApps(
       apiCount,
       callCount: appNodes.length,
       reasons,
-      evidenceId: evidenceNode?.evidence_ids[0],
+      primaryNode,
       isFaultApp,
     };
   });
@@ -283,14 +283,8 @@ function CmAppCard({
           </p>
         </div>
       )}
-      {app.evidenceId && hasError && (
-        <button
-          className="journey-app-evidence"
-          onClick={() => app.evidenceId && openEvidence(app.evidenceId, "raw")}
-        >
-          <Logs size={13} /> 查看关键证据
-        </button>
-      )}
+      <CallPhases node={app.primaryNode} openEvidence={openEvidence} />
+      <EvidenceActions node={app.primaryNode} openEvidence={openEvidence} />
     </article>
   );
 }

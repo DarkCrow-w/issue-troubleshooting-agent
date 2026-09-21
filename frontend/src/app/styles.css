@@ -528,20 +528,6 @@ textarea::placeholder {
   font-size: 10px;
   line-height: 1.6;
 }
-.journey-app-evidence {
-  display: inline-flex;
-  align-items: center;
-  gap: 5px;
-  margin-top: 9px;
-  padding: 5px 7px;
-  border-radius: 5px;
-  background: #f2f2f2;
-  color: #666;
-  font-size: 9px;
-}
-.journey-app-evidence:hover {
-  background: #e8e8e8;
-}
 .call-phases {
   display: grid;
   gap: 5px;
