@@ -8,8 +8,20 @@ from typing import Any
 
 from troubleshooter.domain.models import Event
 
+from .java_log import parse_java_log
+
 EXCEPTION_CLASS = re.compile(r"\b[A-Z][A-Za-z0-9_$]{0,100}(?:Exception|Error)\b")
 HTTP_STATUS = re.compile(r"^\s*(\d{3})(?:\s|$)")
+REQUEST_MESSAGE = re.compile(
+    r"\b(?:send|receive|received|handle|execute)?\s*(?:request|req)\s+"
+    r"(?:is|body|message|received|sent)\b",
+    re.IGNORECASE,
+)
+RESPONSE_MESSAGE = re.compile(
+    r"\b(?:send|receive|received|handle|execute)?\s*(?:response|res)\s+"
+    r"(?:is|body|message|received|sent)\b",
+    re.IGNORECASE,
+)
 MAX_EXCEPTION_MESSAGE_CHARS = 4_000
 
 
@@ -119,6 +131,7 @@ def extract_exceptions(text: str) -> list[tuple[str, str]]:
 
 def normalize(record: dict, config: dict) -> Event:
     raw = record.get("_raw", "")
+    java_log = parse_java_log(raw)
     warnings: list[str] = []
     fields = dict(record)
     # _raw 可补全 Splunk 未提取的字段；冲突时优先提取字段，同时留下告警。
@@ -148,6 +161,8 @@ def normalize(record: dict, config: dict) -> Event:
         ),
         None,
     )
+    if request is None:
+        request = java_log.request
     response = next(
         (
             fields[k]
@@ -156,9 +171,11 @@ def normalize(record: dict, config: dict) -> Event:
         ),
         None,
     )
+    if response is None:
+        response = java_log.response
     request = decode_payload(request, warnings)
     response = decode_payload(response, warnings)
-    ids = {}
+    ids = dict(java_log.identifiers)
     id_fields = set(config["correlation_fields"]) | {
         "contextId",
         "x_request_id",
@@ -178,9 +195,15 @@ def normalize(record: dict, config: dict) -> Event:
             ids[key] = str(value)
     for key in id_fields:
         if key not in ids and isinstance(raw, str):
-            match = re.search(rf'\b{re.escape(key)}\s*[=:]\s*["\']?([\w.:/-]+)', raw)
+            # 空字段后常紧跟下一个 ``key=value``，不能把下一个 key 当作当前 ID。
+            match = re.search(
+                rf"\b{re.escape(key)}[ \t]*[=:][ \t]*[\"']?"
+                rf"(?:\[(?P<bracket>[\w.:/-]+)]|"
+                rf"(?![A-Za-z][\w.-]*[=:])(?P<plain>[\w.:/-]+))",
+                raw,
+            )
             if match:
-                ids[key] = match.group(1)
+                ids[key] = match.group("bracket") or match.group("plain")
     correlation_ids = {ids[k] for k in config["correlation_fields"] if k in ids}
     if service in config.get("composite_id_services", []) and ":" in ids.get(
         "seqNo", ""
@@ -188,15 +211,15 @@ def normalize(record: dict, config: dict) -> Event:
         root, business_id = ids["seqNo"].split(":", 1)
         correlation_ids.add(root)
         ids["businessSequence"] = business_id
-    message = str(fields.get("message") or raw)
+    message = str(fields.get("message") or java_log.message or raw)
     # Java 日志框架对异常字段命名不统一。按信息完整度选择第一个非空来源，
     # message/throwable 是结构化日志里很常见的两种形式。
     exception_text = str(
         fields.get("stacktrace")
         or fields.get("throwable")
         or fields.get("exception")
-        or fields.get("message")
         or raw
+        or fields.get("message")
     )
     matches = extract_exceptions(exception_text)
     exception = None
@@ -213,14 +236,19 @@ def normalize(record: dict, config: dict) -> Event:
     if kind not in ("request", "response", "exception"):
         if exception:
             kind = "exception"
-        elif response is not None or re.search(r"\bresponse\b", message, re.IGNORECASE):
+        elif java_log.kind:
+            kind = java_log.kind
+        elif response is not None or RESPONSE_MESSAGE.search(message):
             kind = "response"
-        elif request is not None or re.search(r"\brequest\b", message, re.IGNORECASE):
+        elif request is not None or REQUEST_MESSAGE.search(message):
             kind = "request"
         else:
             kind = "log"
     status = parse_http_status(
-        fields.get("httpStatus", fields.get("statusCode", fields.get("status"))),
+        fields.get(
+            "httpStatus",
+            fields.get("statusCode", fields.get("status", java_log.http_status)),
+        ),
         warnings,
     )
     business_code = fields.get("businessCode", fields.get("errorCode"))
@@ -233,7 +261,9 @@ def normalize(record: dict, config: dict) -> Event:
             ),
             None,
         )
-    timestamp = normalize_time(fields.get("_time", fields.get("timestamp")))
+    timestamp = normalize_time(
+        fields.get("_time", fields.get("timestamp", java_log.timestamp))
+    )
     if not timestamp:
         warnings.append("事件缺少时间")
     if record.get("_cd"):
@@ -260,17 +290,21 @@ def normalize(record: dict, config: dict) -> Event:
             fields.get("serviceId")
             or fields.get("path")
             or fields.get("x_envoy_original_path")
+            or java_log.api
             or ""
         ),
-        method=str(fields.get("IN_METHOD") or fields.get("method") or ""),
+        method=str(
+            fields.get("IN_METHOD") or fields.get("method") or java_log.method or ""
+        ),
         direction=str(
             fields.get("direction")
             or fields.get("callDirection")
             or fields.get("logDirection")
+            or java_log.direction
             or "unknown"
         ).lower(),
         kind=kind,
-        level=str(fields.get("level", "")).upper(),
+        level=str(fields.get("level") or java_log.level or "").upper(),
         message=message,
         request=request,
         response=response,
@@ -282,11 +316,20 @@ def normalize(record: dict, config: dict) -> Event:
             or fields.get("peer_service")
             or fields.get("targetService")
             or fields.get("downstreamService")
+            or java_log.peer_service
             or ""
         ),
-        call_id=str(fields.get("callId") or fields.get("spanId") or ""),
+        call_id=str(
+            fields.get("callId")
+            or fields.get("spanId")
+            or ids.get("x_b3_spanid")
+            or ""
+        ),
         parent_call_id=str(
-            fields.get("parentCallId") or fields.get("parentSpanId") or ""
+            fields.get("parentCallId")
+            or fields.get("parentSpanId")
+            or ids.get("x_b3_parentspanid")
+            or ""
         ),
         attempt=str(fields.get("attempt") or fields.get("x_envoy_attempt_count") or ""),
         source={
