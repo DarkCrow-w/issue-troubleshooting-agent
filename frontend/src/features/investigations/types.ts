@@ -54,6 +54,7 @@ export interface JourneyNode {
   failure_phase_label?: string;
   phases?: {
     request: JourneyPhase;
+    request_processing: JourneyPhase;
     response: JourneyPhase;
     response_processing: JourneyPhase;
   };

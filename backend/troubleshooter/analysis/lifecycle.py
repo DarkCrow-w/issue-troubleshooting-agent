@@ -59,21 +59,25 @@ def analyze_call_lifecycle(
 
     failed_ids: dict[str, list[str]] = {
         "request": [],
+        "request_processing": [],
         "response": [],
         "response_processing": [],
         "unknown": [],
     }
     reasons = []
     for event, failure, event_phase in failures:
-        visible_phase = (
-            "request" if event_phase == "request_processing" else event_phase
-        )
-        failed_ids[visible_phase].append(event.id)
+        failed_ids[event_phase].append(event.id)
         reasons.extend(failure["reasons"])
 
     request_status = "failed" if failed_ids["request"] else "unknown"
     if request_ids and request_status != "failed":
         request_status = "success"
+
+    request_processing_status = (
+        "failed" if failed_ids["request_processing"] else "unknown"
+    )
+    if response_ids and request_processing_status != "failed":
+        request_processing_status = "success"
 
     response_status = "failed" if failed_ids["response"] else "unknown"
     if response_ids and response_status != "failed":
@@ -103,6 +107,10 @@ def analyze_call_lifecycle(
             "request": _phase(
                 request_status,
                 request_ids + failed_ids["request"],
+            ),
+            "request_processing": _phase(
+                request_processing_status,
+                failed_ids["request_processing"],
             ),
             "response": _phase(
                 response_status,

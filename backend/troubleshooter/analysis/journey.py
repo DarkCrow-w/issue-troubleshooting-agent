@@ -171,6 +171,7 @@ def _entry_boundary(nodes: list[dict], incoming: set[str]) -> dict | None:
                 "status": "success" if entry["request_ids"] else "unknown",
                 "evidence_ids": entry["request_ids"],
             },
+            "request_processing": {"status": "unknown", "evidence_ids": []},
             "response": {
                 "status": "success" if entry["response_ids"] else "unknown",
                 "evidence_ids": entry["response_ids"],

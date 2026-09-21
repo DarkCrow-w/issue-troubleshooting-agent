@@ -64,18 +64,43 @@ function EvidenceActions({
 }
 
 const phaseMeta = {
-  request: { label: "请求发送", icon: ArrowRight, focus: "request" as const },
-  response: { label: "响应返回", icon: ArrowLeft, focus: "response" as const },
+  request: { icon: ArrowRight, focus: "request" as const },
+  request_processing: { icon: Settings2, focus: "raw" as const },
+  response: { icon: ArrowLeft, focus: "response" as const },
   response_processing: {
-    label: "响应后处理",
     icon: Settings2,
     focus: "raw" as const,
   },
 };
 
-function phaseStatusLabel(phase: string, status: JourneyStatus) {
+function phaseLabel(phase: string, direction: string) {
+  if (phase === "request") {
+    if (direction === "inbound") return "请求接收";
+    if (direction === "outbound") return "请求发送";
+    return "请求";
+  }
+  if (phase === "request_processing") return "请求处理";
+  if (phase === "response") {
+    if (direction === "inbound") return "响应返回上游";
+    if (direction === "outbound") return "响应接收";
+    return "响应";
+  }
+  return "响应后处理";
+}
+
+function phaseStatusLabel(
+  phase: string,
+  status: JourneyStatus,
+  direction: string,
+) {
   if (phase === "response_processing" && status === "success") return "未见异常";
-  if (status === "success") return phase === "response" ? "已返回" : "已记录";
+  if (status === "success" && phase === "request") {
+    return direction === "inbound" ? "已接收" : "已发送";
+  }
+  if (status === "success" && phase === "request_processing") return "已完成";
+  if (status === "success" && phase === "response") {
+    return direction === "outbound" ? "已接收" : "已返回";
+  }
   if (status === "failed") return "此处报错";
   if (status === "warning") return "证据不完整";
   return "未观测";
@@ -99,10 +124,10 @@ function CallPhases({
         const content = (
           <>
             <span className="call-phase-name">
-              <Icon size={13} /> {meta.label}
+              <Icon size={13} /> {phaseLabel(phaseId, node.direction)}
             </span>
             <span className={`call-phase-status ${phase.status}`}>
-              {phaseStatusLabel(phaseId, phase.status)}
+              {phaseStatusLabel(phaseId, phase.status, node.direction)}
             </span>
           </>
         );
@@ -182,6 +207,20 @@ const statusPriority: Record<JourneyStatus, number> = {
   success: 1,
 };
 
+function nodeRelevance(
+  node: JourneyNode,
+  attribution: Journey["attribution"],
+) {
+  const attributionEvidence = new Set(attribution.evidence_ids);
+  let score = statusPriority[node.status];
+  if (node.failure_reasons.length > 0) score += 20;
+  if (node.direction === "outbound") score += 30;
+  if (node.api) score += 20;
+  if (node.evidence_ids.some((id) => attributionEvidence.has(id))) score += 500;
+  if (node.id === attribution.node_id) score += 1000;
+  return score;
+}
+
 function summarizeCmApps(
   nodes: JourneyNode[],
   attribution: Journey["attribution"],
@@ -215,11 +254,7 @@ function summarizeCmApps(
 
     // 根因节点的原因最重要，其次才采用同一应用中其他异常调用的原因。
     const orderedNodes = [...appNodes].sort((left, right) => {
-      const leftIsRoot = left.id === attribution.node_id ? 1 : 0;
-      const rightIsRoot = right.id === attribution.node_id ? 1 : 0;
-      const statusDifference =
-        statusPriority[right.status] - statusPriority[left.status];
-      return rightIsRoot - leftIsRoot || statusDifference;
+      return nodeRelevance(right, attribution) - nodeRelevance(left, attribution);
     });
     const reasons = Array.from(
       new Set(
