@@ -30,6 +30,8 @@ class Settings(BaseSettings):
     llm_model: str = Field(min_length=1)
     llm_context_tokens: int = 32000
     llm_max_output_tokens: int = Field(default=8192, ge=1)
+    llm_timeout_seconds: int = Field(default=180, ge=1)
+    llm_enable_thinking: bool = False
     retention_hours: int = 24
     task_timeout_seconds: int = 180
     max_followups: int = 3

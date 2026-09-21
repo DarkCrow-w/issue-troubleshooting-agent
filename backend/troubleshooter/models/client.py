@@ -47,7 +47,8 @@ class ModelClient:
             api_key=self.settings.llm_api_key,
             temperature=0.1,
             max_tokens=self.settings.llm_max_output_tokens,
-            timeout=60,
+            timeout=self.settings.llm_timeout_seconds,
+            extra_body={"enable_thinking": self.settings.llm_enable_thinking},
             max_retries=0,
         )
         return self._model
