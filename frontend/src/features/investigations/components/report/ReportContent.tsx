@@ -43,7 +43,10 @@ function Timeline({
             <span className={`event-dot ${event.kind}`} />
             <div>
               <strong>{event.service}</strong>
-              <span>{event.api || "未识别 API"}</span>
+              <span>
+                {event.component ? `${event.component} · ` : ""}
+                {event.api || "未识别 API"}
+              </span>
             </div>
             <code>{event.kind}</code>
             <ChevronRight size={15} />

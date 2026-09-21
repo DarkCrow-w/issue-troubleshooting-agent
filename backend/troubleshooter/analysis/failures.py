@@ -24,6 +24,7 @@ def failure_localization(events: list[Event], config: dict, artifacts: dict) -> 
                     "event_id": event.id,
                     "service": event.service,
                     "api": event.api,
+                    "component": event.component,
                     "timestamp": event.timestamp,
                     "reasons": reasons,
                 }

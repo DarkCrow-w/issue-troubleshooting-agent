@@ -27,7 +27,7 @@ def render_markdown(report: dict) -> str:
         "",
         attribution.get("caution", ""),
         "",
-        "| 区域 | 状态 | 服务 / API | Request 证据 | Response 证据 |",
+        "| 区域 | 状态 | 服务 / Component / API | Request 证据 | Response 证据 |",
         "| --- | --- | --- | --- | --- |",
     ]
     for stage in journey.get("stages", []):
@@ -47,7 +47,11 @@ def render_markdown(report: dict) -> str:
             )
             continue
         for node in stage["nodes"]:
-            service_api = f"{node['service']} · {node.get('api') or 'API 未知'}"
+            components = " → ".join(node.get("components", []))
+            component_text = f" · {components}" if components else ""
+            service_api = (
+                f"{node['service']}{component_text} · {node.get('api') or 'API 未知'}"
+            )
             cells = (
                 stage["label"],
                 STATUS_LABELS.get(node["status"], node["status"]),

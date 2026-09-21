@@ -471,6 +471,35 @@ textarea::placeholder {
   font-size: 10px;
   line-height: 1.6;
 }
+.component-steps {
+  margin-top: 9px;
+  padding-top: 8px;
+  border-top: 1px dashed #e3e3e3;
+}
+.component-steps > span {
+  display: block;
+  margin-bottom: 6px;
+  color: #999;
+  font-size: 9px;
+}
+.component-steps > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.component-steps strong,
+.component-steps small {
+  padding: 3px 5px;
+  border-radius: 4px;
+  background: #f2f2f2;
+  color: #666;
+  font-size: 9px;
+  font-weight: 500;
+}
+.component-steps strong.failed {
+  background: #fff0eb;
+  color: #a55340;
+}
 .journey-node-actions {
   display: flex;
   flex-wrap: wrap;

@@ -138,6 +138,12 @@ def _node_status(
 
 def _display_node(node: dict, role: str, failure_by_event: dict[str, dict]) -> dict:
     status, reasons = _node_status(node, failure_by_event)
+    failure_components = [
+        failure_by_event[evidence_id].get("component", "")
+        for evidence_id in node.get("evidence_ids", [])
+        if evidence_id in failure_by_event
+        and failure_by_event[evidence_id].get("component")
+    ]
     return {
         "id": node["id"],
         "service": node.get("service", ""),
@@ -145,6 +151,8 @@ def _display_node(node: dict, role: str, failure_by_event: dict[str, dict]) -> d
         "method": node.get("method", ""),
         "direction": node.get("direction", "unknown"),
         "peer_service": node.get("peer_service", ""),
+        "components": node.get("components", []),
+        "failure_component": failure_components[0] if failure_components else "",
         "role": role,
         "status": status,
         "failure_reasons": reasons,
@@ -173,6 +181,8 @@ def _entry_boundary(nodes: list[dict], incoming: set[str]) -> dict | None:
         "method": entry["method"],
         "direction": "inbound",
         "peer_service": entry["service"],
+        "components": [],
+        "failure_component": "",
         "role": "upstream",
         "status": "success" if entry["request_ids"] else "unknown",
         "failure_reasons": [],
@@ -196,6 +206,8 @@ def _external_peer_nodes(nodes: list[dict], config: dict) -> list[dict]:
                 **node,
                 "id": f"peer-{node['id']}",
                 "service": peer or "下游服务（名称未识别）",
+                "components": [],
+                "failure_component": "",
                 "role": "downstream",
                 "virtual": True,
             }
@@ -217,6 +229,7 @@ def _fault_attribution(
             "summary": "当前日志没有出现异常、HTTP 错误或非成功业务码。",
             "confidence": "low",
             "node_id": "",
+            "component": "",
             "evidence_ids": [],
             "caution": "未观测到失败不等同于交易成功，仍受日志覆盖范围限制。",
         }
@@ -260,13 +273,16 @@ def _fault_attribution(
         "downstream": "下游 API 调用",
         "unknown": "故障位置待确认",
     }
+    component = earliest.get("component", "")
+    component_text = f" · {component}" if component else ""
     return {
         "domain": domain,
         "label": labels.get(domain, labels["unknown"]),
-        "summary": f"最早失败出现在 {earliest['service']} {earliest['api'] or '未知 API'}："
-        + "；".join(earliest["reasons"]),
+        "summary": f"最早失败出现在 {earliest['service']}{component_text} "
+        f"{earliest['api'] or '未知 API'}：" + "；".join(earliest["reasons"]),
         "confidence": confidence,
         "node_id": node_id,
+        "component": component,
         "evidence_ids": [earliest["event_id"]],
         "reasons": earliest["reasons"],
         "caution": "这里标记的是最早观测到的故障位置，不等同于最终根因。",
@@ -290,30 +306,13 @@ def _stage_status(nodes: list[dict], fault_domain: str, stage_id: str) -> str:
 
 def _mark_propagated_failure(nodes: list[dict], attribution: dict) -> None:
     """故障归到边界时，CM 节点表示观测/传播错误，不再显示成第二个故障域。"""
-    source_node_id = ""
-    if attribution["domain"] == "downstream" and attribution["node_id"].startswith(
-        "peer-"
-    ):
-        source_node_id = attribution["node_id"].removeprefix("peer-")
-    elif (
-        attribution["domain"] == "upstream"
-        and attribution["node_id"] == "boundary-upstream"
-    ):
-        evidence_ids = set(attribution["evidence_ids"])
-        source = next(
-            (
-                node
-                for node in nodes
-                if node["role"] == "cm"
-                and evidence_ids.intersection(node["evidence_ids"])
-            ),
-            None,
-        )
-        source_node_id = source["id"] if source else ""
-
-    source = next((node for node in nodes if node["id"] == source_node_id), None)
-    if source and source["status"] == "failed":
-        source["status"] = "affected"
+    if attribution["domain"] not in ("upstream", "downstream"):
+        return
+    # 最早失败已经明确落在系统边界时，随后出现在 CM 响应中的失败码是传播结果。
+    # 如果 CM 本身更早失败，fault_attribution 会把故障域留在 CM，不会进入这里。
+    for node in nodes:
+        if node["role"] == "cm" and node["status"] == "failed":
+            node["status"] = "affected"
 
 
 def transaction_journey(events: list[Event], config: dict, artifacts: dict) -> dict:

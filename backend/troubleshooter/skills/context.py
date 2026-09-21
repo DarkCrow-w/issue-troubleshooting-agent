@@ -12,6 +12,8 @@ def _journey_summary(value: dict) -> dict:
                 "service": node.get("service"),
                 "api": node.get("api"),
                 "status": node.get("status"),
+                "components": node.get("components", []),
+                "failure_component": node.get("failure_component", ""),
                 "evidence_ids": node.get("evidence_ids", []),
             }
             for node in stage.get("nodes", [])

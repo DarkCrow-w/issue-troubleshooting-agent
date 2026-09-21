@@ -19,6 +19,9 @@ function CallCard({
       <div>
         <strong>{node.service}</strong>
         <code>{node.api || "API 未知"}</code>
+        {node.components && node.components.length > 0 && (
+          <small>内部步骤：{node.components.join(" → ")}</small>
+        )}
         <small>
           {node.evidence_ids.length} 条证据
           {node.attempt ? ` · 第 ${node.attempt} 次尝试` : ""}

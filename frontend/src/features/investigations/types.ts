@@ -20,6 +20,7 @@ export interface CallNode {
   attempt?: string;
   request_ids?: string[];
   response_ids?: string[];
+  components?: string[];
 }
 export type EvidenceFocus = "request" | "response" | "raw";
 export type OpenEvidence = (id: string, focus?: EvidenceFocus) => void;
@@ -36,6 +37,8 @@ export interface JourneyNode {
   method: string;
   direction: string;
   peer_service: string;
+  components: string[];
+  failure_component: string;
   role: "upstream" | "cm" | "downstream" | "unknown";
   status: JourneyStatus;
   failure_reasons: string[];
@@ -61,6 +64,7 @@ export interface TransactionJourney {
     confidence: string;
     node_id: string;
     evidence_ids: string[];
+    component?: string;
     caution: string;
   };
   caution: string;
@@ -82,6 +86,7 @@ export interface Report {
       timestamp: string;
       service: string;
       api: string;
+      component?: string;
       kind: string;
     }[];
   };

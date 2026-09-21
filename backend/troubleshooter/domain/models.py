@@ -40,6 +40,7 @@ class Event(BaseModel):
     correlation_ids: list[str] = Field(default_factory=list)
     api: str = ""
     method: str = ""
+    component: str = ""
     direction: str = "unknown"
     kind: str = "log"
     level: str = ""

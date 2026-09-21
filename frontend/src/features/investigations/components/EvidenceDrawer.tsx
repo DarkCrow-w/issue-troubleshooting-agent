@@ -6,6 +6,7 @@ type EvidenceData = {
     timestamp?: string;
     service?: string;
     api?: string;
+    component?: string;
     request?: unknown;
     response?: unknown;
     http_status?: number;
@@ -47,6 +48,12 @@ function EvidenceBody({ evidence }: { evidence: EvidenceView }) {
           <dt>时间</dt>
           <dd>{event.timestamp || "未知"}</dd>
         </div>
+        {event.component && (
+          <div>
+            <dt>内部步骤</dt>
+            <dd>{event.component}</dd>
+          </div>
+        )}
       </dl>
       {payload === null || payload === undefined ? (
         <p className="muted">该条证据中没有提取到 {focusLabels[evidence.focus]} 内容。</p>

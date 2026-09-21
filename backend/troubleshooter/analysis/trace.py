@@ -8,6 +8,7 @@ from .ordering import time_key
 
 
 def trace_reconstruction(events: list[Event], config: dict, artifacts: dict) -> dict:
+    ordered_events = sorted(events, key=time_key)
     nodes = artifacts["request-response"]["calls"]
     # 只有异常日志、没有请求响应的服务也必须保留，避免调用图漏掉真实观测。
     represented = {eid for n in nodes for eid in n["evidence_ids"]}
@@ -16,10 +17,13 @@ def trace_reconstruction(events: list[Event], config: dict, artifacts: dict) -> 
     for node in nodes:
         if node.get("call_id"):
             nodes_by_call[(node["service"], node["call_id"])].append(node)
-    for event in events:
+    for event in ordered_events:
         candidates = nodes_by_call.get((event.service, event.call_id), [])
         if event.id not in represented and len(candidates) == 1:
             candidates[0]["evidence_ids"].append(event.id)
+            components = candidates[0].setdefault("components", [])
+            if event.component and event.component not in components:
+                components.append(event.component)
             represented.add(event.id)
     nodes = nodes + [
         {
@@ -29,27 +33,40 @@ def trace_reconstruction(events: list[Event], config: dict, artifacts: dict) -> 
             "evidence_ids": [e.id],
             "request_ids": [],
             "response_ids": [],
+            "components": [e.component] if e.component else [],
         }
-        for e in events
+        for e in ordered_events
         if e.id not in represented and (e.api or e.exception)
     ]
     event_node = {eid: n["id"] for n in nodes for eid in n["evidence_ids"]}
+    # 组件按事件时间重新汇总；request/response 先配对时可能跨过中间的 Flow 日志。
+    components_by_node: dict[str, list[str]] = defaultdict(list)
+    for event in ordered_events:
+        node_id = event_node.get(event.id)
+        if not node_id or not event.component:
+            continue
+        components = components_by_node[node_id]
+        if event.component not in components:
+            components.append(event.component)
+    for node in nodes:
+        node["components"] = components_by_node[node["id"]]
     node_index = {node["id"]: node for node in nodes}
     calls = defaultdict(list)
-    for event in events:
+    for event in ordered_events:
         if event.call_id and event.id in event_node:
             calls[event.call_id].append(event)
     call_nodes = {
-        call_id: {event_node[e.id] for e in entries} for call_id, entries in calls.items()
+        call_id: {event_node[e.id] for e in entries}
+        for call_id, entries in calls.items()
     }
     peers = defaultdict(dict)
-    for event in events:
+    for event in ordered_events:
         if event.id in event_node:
             for correlation_id in event.correlation_ids:
                 peers[(event.service, correlation_id)][event_node[event.id]] = event.id
     edges = []
     seen = set()
-    for child in events:
+    for child in ordered_events:
         if child.id not in event_node:
             continue
         parents = calls.get(child.parent_call_id, []) if child.parent_call_id else []
@@ -57,9 +74,9 @@ def trace_reconstruction(events: list[Event], config: dict, artifacts: dict) -> 
         if len(parent_nodes) == 1:
             parent = parents[0]
             source, target = event_node[parent.id], event_node[child.id]
-            ambiguous = node_index[source].get("pairing_ambiguous") or node_index[target].get(
-                "pairing_ambiguous"
-            )
+            ambiguous = node_index[source].get("pairing_ambiguous") or node_index[
+                target
+            ].get("pairing_ambiguous")
             # 显式父子关系有歧义时直接放弃，不能降级为猜测来绕过歧义检查。
             if source == target or ambiguous:
                 continue
@@ -73,7 +90,9 @@ def trace_reconstruction(events: list[Event], config: dict, artifacts: dict) -> 
         elif child.peer_service:
             candidate_nodes = {}
             for correlation_id in child.correlation_ids:
-                candidate_nodes.update(peers.get((child.peer_service, correlation_id), {}))
+                candidate_nodes.update(
+                    peers.get((child.peer_service, correlation_id), {})
+                )
             # 仅有目标服务/关联 ID 时，只允许唯一候选，并始终标记为推测。
             if len(candidate_nodes) != 1:
                 continue
@@ -104,8 +123,9 @@ def trace_reconstruction(events: list[Event], config: dict, artifacts: dict) -> 
                 "timestamp": e.timestamp,
                 "service": e.service,
                 "api": e.api,
+                "component": e.component,
                 "kind": e.kind,
             }
-            for e in sorted(events, key=time_key)
+            for e in ordered_events
         ],
     }

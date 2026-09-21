@@ -25,7 +25,10 @@ def build_report(state: InvestigationState) -> dict:
     if not state["diagnoses"]:
         findings = [
             {
-                "statement": f"{f['service']}：" + "；".join(f["reasons"]),
+                "statement": f"{f['service']}"
+                + (f" · {f['component']}" if f.get("component") else "")
+                + "："
+                + "；".join(f["reasons"]),
                 "evidence_ids": [f["event_id"]],
                 "confidence": "high",
             }

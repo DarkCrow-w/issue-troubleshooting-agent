@@ -72,6 +72,12 @@ topology:
 无法根据配置或明确调用边分类的服务会标为“服务角色待配置”，不会默认判定为
 上游或下游。修改这些规则不需要改代码，也不会改变原始证据。
 
+如果需要定位到 `payment100017Flow` 这样的 Java 内部步骤，可调整同一文件中的
+`component_fields` 和 `component_name_patterns`。系统默认读取常见 component/flow/
+process/class 字段，并从 logger、class 和 message 中识别 `*Flow`、`*Component`、
+`*Handler`、`*Processor`。只有组件日志带独立 `callId/spanId` 和
+`parentCallId/parentSpanId` 时才建立组件调用边；否则只显示为服务内观测步骤。
+
 4. 构建并启动：
 
 ```bash
