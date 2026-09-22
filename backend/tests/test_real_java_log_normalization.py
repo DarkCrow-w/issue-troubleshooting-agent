@@ -252,8 +252,12 @@ def test_real_format_builds_call_tree_and_attributes_downstream_failure():
 
     artifacts = {}
     artifacts["request-response"] = request_response(events, FLOW_CONFIG, artifacts)
-    artifacts["trace-reconstruction"] = trace_reconstruction(events, FLOW_CONFIG, artifacts)
-    artifacts["failure-localization"] = failure_localization(events, FLOW_CONFIG, artifacts)
+    artifacts["trace-reconstruction"] = trace_reconstruction(
+        events, FLOW_CONFIG, artifacts
+    )
+    artifacts["failure-localization"] = failure_localization(
+        events, FLOW_CONFIG, artifacts
+    )
     journey = transaction_journey(events, FLOW_CONFIG, artifacts)
 
     assert len(artifacts["trace-reconstruction"]["nodes"]) == 3

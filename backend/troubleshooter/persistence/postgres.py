@@ -28,7 +28,9 @@ class Store:
 
     def get(self, task_id: str) -> dict | None:
         with self.connect() as db:
-            row = db.execute("SELECT payload FROM tasks WHERE id=%s", (task_id,)).fetchone()
+            row = db.execute(
+                "SELECT payload FROM tasks WHERE id=%s", (task_id,)
+            ).fetchone()
         return row[0] if row else None
 
     def evidence(self, task_id: str, event_id: str) -> dict | None:
@@ -66,4 +68,6 @@ class Store:
         threshold = datetime.now(timezone.utc) - timedelta(hours=hours)
         with self.connect() as db:
             # Foreign key cascade removes evidence in the same transaction.
-            return db.execute("DELETE FROM tasks WHERE updated < %s", (threshold,)).rowcount
+            return db.execute(
+                "DELETE FROM tasks WHERE updated < %s", (threshold,)
+            ).rowcount

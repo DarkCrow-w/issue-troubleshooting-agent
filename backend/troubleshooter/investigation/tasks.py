@@ -44,7 +44,7 @@ class TaskManager:
                 if failed:
                     log_event("retention.recovered")
                 failed = False
-            except Exception as exc:
+            except Exception as exc:  # noqa: BLE001
                 # 持续故障仅记录第一次，恢复后再记录；清理线程继续运行。
                 if not failed:
                     log_event("retention.failed", level=ERROR, error=exc)

@@ -27,10 +27,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         await manager.close()
 
     app = FastAPI(title="Transaction Agent Service", lifespan=lifespan)
-    app.state.store, app.state.service, app.state.tasks = service.store, service, manager
+    app.state.store, app.state.service, app.state.tasks = (
+        service.store,
+        service,
+        manager,
+    )
 
     async def authenticate(authorization: str = Header(default="")):
-        if not secrets.compare_digest(authorization, "Bearer " + settings.service_token):
+        if not secrets.compare_digest(
+            authorization, "Bearer " + settings.service_token
+        ):
             raise HTTPException(401, "内部服务认证失败")
 
     dependencies = [Depends(authenticate)]
@@ -42,7 +48,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.get("/internal/workflows", dependencies=dependencies)
     async def workflows():
         return {
-            "workflows": [{"id": k, **v} for k, v in service.config["workflows"].items()],
+            "workflows": [
+                {"id": k, **v} for k, v in service.config["workflows"].items()
+            ],
             "environments": list(service.config["environments"]),
             "model": settings.llm_model,
         }
@@ -74,7 +82,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(404, "任务不存在或已过期")
         return result
 
-    @app.get("/internal/investigations/{task_id}/evidence/{event_id}", dependencies=dependencies)
+    @app.get(
+        "/internal/investigations/{task_id}/evidence/{event_id}",
+        dependencies=dependencies,
+    )
     async def evidence(task_id: str, event_id: str):
         await get(task_id)
         record = service.store.evidence(task_id, event_id)

@@ -11,6 +11,7 @@ PHASE_LABELS = {
     "response_processing": "响应后处理",
     "unknown": "未知阶段",
 }
+FAILURE_PHASES = tuple(PHASE_LABELS)
 
 
 def _event_phase(event: Event, response_times: list[float]) -> str:
@@ -34,6 +35,63 @@ def _phase(status: str, evidence_ids: list[str]) -> dict:
     return {"status": status, "evidence_ids": list(dict.fromkeys(evidence_ids))}
 
 
+def _failures(
+    evidence_ids: list[str],
+    events_by_id: dict[str, Event],
+    failure_by_event: dict[str, dict],
+    response_times: list[float],
+) -> list[tuple[Event, dict, str]]:
+    result = []
+    for event_id in evidence_ids:
+        event = events_by_id.get(event_id)
+        failure = failure_by_event.get(event_id)
+        if event and failure:
+            result.append((event, failure, _event_phase(event, response_times)))
+    return sorted(result, key=lambda item: time_key(item[0]))
+
+
+def _group_failures(
+    failures: list[tuple[Event, dict, str]],
+) -> tuple[dict[str, list[str]], list[str]]:
+    ids = {phase: [] for phase in FAILURE_PHASES}
+    reasons = []
+    for event, failure, phase in failures:
+        ids[phase].append(event.id)
+        reasons.extend(failure["reasons"])
+    return ids, list(dict.fromkeys(reasons))
+
+
+def _phase_status(failed_ids: list[str], observed_ids: list[str]) -> str:
+    if failed_ids:
+        return "failed"
+    return "success" if observed_ids else "unknown"
+
+
+def _response_status(
+    failed_ids: list[str], response_ids: list[str], missing: bool
+) -> str:
+    status = _phase_status(failed_ids, response_ids)
+    return "warning" if status == "unknown" and missing else status
+
+
+def _response_processing_status(
+    failed_ids: list[str], unknown_ids: list[str], response_ids: list[str]
+) -> str:
+    if failed_ids:
+        return "failed"
+    if unknown_ids:
+        return "warning"
+    return "success" if response_ids else "unknown"
+
+
+def _call_status(failures: list, node: dict, response_ids: list[str]) -> str:
+    if failures:
+        return "failed"
+    if node.get("missing_response") or node.get("pairing_ambiguous"):
+        return "warning"
+    return "success" if response_ids else "unknown"
+
+
 def analyze_call_lifecycle(
     node: dict,
     events_by_id: dict[str, Event],
@@ -49,75 +107,38 @@ def analyze_call_lifecycle(
         if event_id in events_by_id
     ]
 
-    failures = []
-    for event_id in evidence_ids:
-        event = events_by_id.get(event_id)
-        failure = failure_by_event.get(event_id)
-        if event and failure:
-            failures.append((event, failure, _event_phase(event, response_times)))
-    failures.sort(key=lambda item: time_key(item[0]))
-
-    failed_ids: dict[str, list[str]] = {
-        "request": [],
-        "request_processing": [],
-        "response": [],
-        "response_processing": [],
-        "unknown": [],
-    }
-    reasons = []
-    for event, failure, event_phase in failures:
-        failed_ids[event_phase].append(event.id)
-        reasons.extend(failure["reasons"])
-
-    request_status = "failed" if failed_ids["request"] else "unknown"
-    if request_ids and request_status != "failed":
-        request_status = "success"
-
-    request_processing_status = (
-        "failed" if failed_ids["request_processing"] else "unknown"
-    )
-    if response_ids and request_processing_status != "failed":
-        request_processing_status = "success"
-
-    response_status = "failed" if failed_ids["response"] else "unknown"
-    if response_ids and response_status != "failed":
-        response_status = "success"
-    elif node.get("missing_response"):
-        response_status = "warning"
-
-    processing_status = "failed" if failed_ids["response_processing"] else "unknown"
-    if failed_ids["unknown"] and processing_status != "failed":
-        processing_status = "warning"
-    if response_ids and processing_status != "failed":
-        processing_status = "warning" if failed_ids["unknown"] else "success"
-
+    failures = _failures(evidence_ids, events_by_id, failure_by_event, response_times)
+    failed_ids, reasons = _group_failures(failures)
     first_failure_phase = failures[0][2] if failures else ""
-    status = "failed" if failures else "unknown"
-    if not failures and (node.get("missing_response") or node.get("pairing_ambiguous")):
-        status = "warning"
-    elif not failures and response_ids:
-        status = "success"
 
     return {
-        "status": status,
-        "failure_reasons": list(dict.fromkeys(reasons)),
+        "status": _call_status(failures, node, response_ids),
+        "failure_reasons": reasons,
         "failure_phase": first_failure_phase,
         "failure_phase_label": PHASE_LABELS.get(first_failure_phase, ""),
         "phases": {
             "request": _phase(
-                request_status,
+                _phase_status(failed_ids["request"], request_ids),
                 request_ids + failed_ids["request"],
             ),
             "request_processing": _phase(
-                request_processing_status,
+                _phase_status(failed_ids["request_processing"], response_ids),
                 failed_ids["request_processing"],
             ),
             "response": _phase(
-                response_status,
+                _response_status(
+                    failed_ids["response"],
+                    response_ids,
+                    node.get("missing_response", False),
+                ),
                 response_ids + failed_ids["response"],
             ),
             "response_processing": _phase(
-                processing_status,
+                _response_processing_status(
+                    failed_ids["response_processing"],
+                    failed_ids["unknown"],
+                    response_ids,
+                ),
                 failed_ids["response_processing"] + failed_ids["unknown"],
             ),
         },

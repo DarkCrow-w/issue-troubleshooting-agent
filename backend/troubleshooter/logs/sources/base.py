@@ -6,4 +6,6 @@ from troubleshooter.domain.models import QuerySpec, SearchResult
 
 
 class LogSource(Protocol):
-    async def search(self, query: QuerySpec, max_events: int, max_bytes: int) -> SearchResult: ...
+    async def search(
+        self, query: QuerySpec, max_events: int, max_bytes: int
+    ) -> SearchResult: ...

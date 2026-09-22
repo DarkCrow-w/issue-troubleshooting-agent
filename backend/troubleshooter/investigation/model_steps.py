@@ -41,7 +41,11 @@ class ModelSteps:
             return {"warnings": warnings + [str(exc)], "skill_failed": True}
 
     async def _expand_evidence(
-        self, skill: Skill, result: ModelDiagnosis, state: InvestigationState, warnings: list[str]
+        self,
+        skill: Skill,
+        result: ModelDiagnosis,
+        state: InvestigationState,
+        warnings: list[str],
     ) -> ModelDiagnosis:
         if not result.evidence_requests:
             return result
@@ -89,7 +93,11 @@ class ModelSteps:
                     skill.prompt,
                     self.question,
                     results,
-                    {key: value for key, value in state["artifacts"].items() if key in custom_ids},
+                    {
+                        key: value
+                        for key, value in state["artifacts"].items()
+                        if key in custom_ids
+                    },
                     set(state["events"]),
                 )
                 update["diagnoses"] = [synthesis]

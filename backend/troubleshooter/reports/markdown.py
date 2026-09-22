@@ -1,4 +1,4 @@
-"""Human-readable export of the same evidence-backed report shown in the UI."""
+"""生成与页面相同证据来源的 Markdown 报告。"""
 
 STATUS_LABELS = {
     "success": "正常",
@@ -21,8 +21,11 @@ def table_cell(value) -> str:
     return str(value or "—").replace("|", "\\|").replace("\n", " ")
 
 
-def render_markdown(report: dict) -> str:
-    journey = report.get("journey", {})
+def _table_row(values) -> str:
+    return "| " + " | ".join(table_cell(value) for value in values) + " |"
+
+
+def _journey_lines(journey: dict) -> list[str]:
     attribution = journey.get("attribution", {})
     lines = [
         "# 交易排查报告",
@@ -41,8 +44,7 @@ def render_markdown(report: dict) -> str:
     for stage in journey.get("stages", []):
         if not stage.get("nodes"):
             lines.append(
-                "| "
-                + " | ".join(
+                _table_row(
                     (
                         stage["label"],
                         STATUS_LABELS.get(stage["status"], stage["status"]),
@@ -52,111 +54,141 @@ def render_markdown(report: dict) -> str:
                         "—",
                     )
                 )
-                + " |"
             )
             continue
         for node in stage["nodes"]:
             service_api = f"{node['service']} · {node.get('api') or 'API 未知'}"
-            cells = (
-                stage["label"],
-                STATUS_LABELS.get(node["status"], node["status"]),
-                service_api,
-                PHASE_LABELS.get(node.get("failure_phase", ""), "—"),
-                ", ".join(node.get("request_ids", [])),
-                ", ".join(node.get("response_ids", [])),
+            lines.append(
+                _table_row(
+                    (
+                        stage["label"],
+                        STATUS_LABELS.get(node["status"], node["status"]),
+                        service_api,
+                        PHASE_LABELS.get(node.get("failure_phase", ""), "—"),
+                        ", ".join(node.get("request_ids", [])),
+                        ", ".join(node.get("response_ids", [])),
+                    )
+                )
             )
-            lines.append("| " + " | ".join(table_cell(cell) for cell in cells) + " |")
-    lines.extend(
-        [
-            "",
-            "## 详细分析",
-            "",
-            report["summary"],
-            "",
-            "## 服务与 API",
-            "",
-            "| 调用实例 | 服务 | API | 证据 |",
-            "| --- | --- | --- | --- |",
-        ]
-    )
-    for node in report["graph"]["nodes"]:
-        cells = (
-            node["id"],
-            node["service"],
-            node["api"],
-            ", ".join(node["evidence_ids"]),
+    return lines
+
+
+def _graph_lines(report: dict) -> list[str]:
+    graph = report["graph"]
+    lines = [
+        "",
+        "## 详细分析",
+        "",
+        report["summary"],
+        "",
+        "## 服务与 API",
+        "",
+        "| 调用实例 | 服务 | API | 证据 |",
+        "| --- | --- | --- | --- |",
+    ]
+    for node in graph["nodes"]:
+        lines.append(
+            _table_row(
+                (
+                    node["id"],
+                    node["service"],
+                    node["api"],
+                    ", ".join(node["evidence_ids"]),
+                )
+            )
         )
-        lines.append("| " + " | ".join(table_cell(cell) for cell in cells) + " |")
     lines.extend(["", "## 调用关系", ""])
-    if not report["graph"]["edges"]:
+    if not graph["edges"]:
         lines.append("缺少足够证据建立调用边；节点顺序不代表调用关系。")
-    for edge in report["graph"]["edges"]:
+    for edge in graph["edges"]:
         certainty = "明确" if edge["certainty"] == "confirmed" else "推测"
         lines.append(
             f"- {edge['source']} → {edge['target']}（{certainty}）：{edge['reason']}"
             f"；证据：{', '.join(edge['evidence_ids'])}"
         )
+    return lines
+
+
+def _failure_lines(report: dict) -> list[str]:
     first = report.get("earliest_observed_failure")
-    if first:
-        lines.extend(
-            [
-                "",
-                "## 最早观测到的失败",
-                "",
-                f"{first['timestamp']} · {first['service']} · {first['event_id']}",
-                "",
-                "最早观测到的失败不等同于根因，跨主机时钟可能存在偏差。",
-            ]
-        )
-    lines.extend(["", "## 观测事实", ""])
+    if not first:
+        return []
+    return [
+        "",
+        "## 最早观测到的失败",
+        "",
+        f"{first['timestamp']} · {first['service']} · {first['event_id']}",
+        "",
+        "最早观测到的失败不等同于根因，跨主机时钟可能存在偏差。",
+    ]
+
+
+def _claim_lines(report: dict) -> list[str]:
+    lines = ["", "## 观测事实", ""]
     lines.extend(
-        f"- {f['statement']}（证据：{', '.join(f['evidence_ids'])}）"
-        for f in report["findings"]
+        f"- {finding['statement']}（证据：{', '.join(finding['evidence_ids'])}）"
+        for finding in report["findings"]
     )
-    for title, key in (
+    sections = (
         ("根因假设", "hypotheses"),
         ("未知信息", "unknowns"),
         ("下一步", "next_steps"),
         ("限制与告警", "warnings"),
         ("运行说明", "notes"),
-    ):
+    )
+    for title, key in sections:
         lines.extend(["", "## " + title, ""])
         for item in report[key]:
-            if isinstance(item, dict):
-                lines.append(
-                    f"- {item['statement']}（{item['confidence']}；证据：{', '.join(item['evidence_ids'])}）"
-                )
-                if item.get("counter_evidence_ids"):
-                    lines.append(
-                        "  反对证据：" + ", ".join(item["counter_evidence_ids"])
-                    )
-                if item.get("verification"):
-                    lines.append("  验证方式：" + item["verification"])
-            else:
+            if not isinstance(item, dict):
                 lines.append("- " + item)
-    lines.extend(
-        [
-            "",
-            "## 日志时间线",
-            "",
-            "| 时间 | 服务 | 类型 | 证据 |",
-            "| --- | --- | --- | --- |",
-        ]
-    )
+                continue
+            lines.append(
+                f"- {item['statement']}（{item['confidence']}；"
+                f"证据：{', '.join(item['evidence_ids'])}）"
+            )
+            if item.get("counter_evidence_ids"):
+                lines.append("  反对证据：" + ", ".join(item["counter_evidence_ids"]))
+            if item.get("verification"):
+                lines.append("  验证方式：" + item["verification"])
+    return lines
+
+
+def _timeline_lines(report: dict) -> list[str]:
+    lines = [
+        "",
+        "## 日志时间线",
+        "",
+        "| 时间 | 服务 | 类型 | 证据 |",
+        "| --- | --- | --- | --- |",
+    ]
     for event in report["graph"]["timeline"]:
         lines.append(
-            "| "
-            + " | ".join(
-                table_cell(event[key])
-                for key in ("timestamp", "service", "kind", "event_id")
+            _table_row(
+                event[key] for key in ("timestamp", "service", "kind", "event_id")
             )
-            + " |"
         )
-    lines.extend(["", "## 查询记录", ""])
+    return lines
+
+
+def _query_lines(report: dict) -> list[str]:
+    lines = ["", "## 查询记录", ""]
     for query in report["queries"]:
         start_time = query["start_time"] or "未指定"
         end_time = query["end_time"] or "未指定"
         lines.append(
-            f"- {query['reason']}：{query['count']} 条结果；时间范围 {start_time} 至 {end_time}。"
+            f"- {query['reason']}：{query['count']} 条结果；"
+            f"时间范围 {start_time} 至 {end_time}。"
         )
-    return "\n".join(lines)
+    return lines
+
+
+def render_markdown(report: dict) -> str:
+    sections = (
+        _journey_lines(report.get("journey", {})),
+        _graph_lines(report),
+        _failure_lines(report),
+        _claim_lines(report),
+        _timeline_lines(report),
+        _query_lines(report),
+    )
+    return "\n".join(line for section in sections for line in section)

@@ -54,32 +54,56 @@ def validate_spl(spl: str) -> tuple[str, str]:
     return split_spl_pipeline(expression)
 
 
-def build_spl(query: QuerySpec, config: dict) -> str:
+def _environment_clause(query: QuerySpec, config: dict) -> str:
     environment = config["environments"].get(query.environment)
     if not environment or not environment.get("indexes"):
         raise ValueError("未配置该环境的 Splunk index")
-    indexes = " OR ".join("index=" + spl_literal(index) for index in environment["indexes"])
-    clauses = [f"({indexes})"]
+    indexes = " OR ".join(
+        "index=" + spl_literal(index) for index in environment["indexes"]
+    )
+    return f"({indexes})"
+
+
+def _identifier_clause(identifier: str, fields: list[str]) -> str:
+    value = spl_literal(identifier)
+    matches = []
+    for field in fields:
+        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", field):
+            raise ValueError("关联字段配置不合法")
+        matches.append(f"{field}={value}")
+    # 裸值用于找到 composite ID，结果归属仍由 EvidenceCollector 严格校验。
+    matches.append(value)
+    return "(" + " OR ".join(matches) + ")"
+
+
+def _service_clause(service: str) -> str:
+    value = spl_literal(service)
+    return f"(appName={value} OR app={value} OR service={value})"
+
+
+def _instance_clause(instance: str) -> str:
+    value = spl_literal(instance)
+    return f"(pod={value} OR host={value})"
+
+
+def build_spl(query: QuerySpec, config: dict) -> str:
+    clauses = [_environment_clause(query, config)]
     if query.identifier:
-        value = spl_literal(query.identifier)
-        matches = []
-        for field in config["correlation_fields"]:
-            if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_.-]*", field):
-                raise ValueError("关联字段配置不合法")
-            matches.append(f"{field}={value}")
-        # Search broadly enough to find composite IDs; verify exact identity in the engine.
-        matches.append(f"{value}")
-        clauses.append("(" + " OR ".join(matches) + ")")
+        clauses.append(
+            _identifier_clause(query.identifier, config["correlation_fields"])
+        )
     if query.service:
-        value = spl_literal(query.service)
-        clauses.append(f"(appName={value} OR app={value} OR service={value})")
+        clauses.append(_service_clause(query.service))
     if query.instance:
-        value = spl_literal(query.instance)
-        clauses.append(f"(pod={value} OR host={value})")
+        clauses.append(_instance_clause(query.instance))
     custom_filter, pipeline = validate_spl(query.spl)
     if custom_filter:
         clauses.append(f"({custom_filter})")
-    if not query.identifier and not (query.service and query.instance) and not query.spl:
+    if (
+        not query.identifier
+        and not (query.service and query.instance)
+        and not query.spl
+    ):
         raise ValueError("上下文查询必须限定服务和实例")
     generated = "search " + " AND ".join(clauses)
     return f"{generated} {pipeline}".rstrip()

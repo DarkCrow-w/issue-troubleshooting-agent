@@ -4,6 +4,7 @@ import hashlib
 import json
 import re
 from datetime import datetime, timezone
+from itertools import chain
 from typing import Any
 
 from troubleshooter.domain.models import Event
@@ -23,6 +24,16 @@ RESPONSE_MESSAGE = re.compile(
     re.IGNORECASE,
 )
 MAX_EXCEPTION_MESSAGE_CHARS = 4_000
+REQUEST_FIELDS = ("reqMessage", "request", "serviceData", "CM_PARAM")
+RESPONSE_FIELDS = ("response", "respMessage", "responseBody")
+DEFAULT_ID_FIELDS = {
+    "contextId",
+    "x_request_id",
+    "sequenceNumber",
+    "traceparent",
+    "spanId",
+    "parentSpanId",
+}
 
 
 def compact_exception_message(message: str) -> str:
@@ -129,64 +140,67 @@ def extract_exceptions(text: str) -> list[tuple[str, str]]:
     return output
 
 
-def normalize(record: dict, config: dict) -> Event:
+def _first_value(fields: dict, names: tuple[str, ...]) -> Any:
+    return next((fields[name] for name in names if fields.get(name) is not None), None)
+
+
+def _merge_raw_fields(record: dict, warnings: list[str]) -> tuple[dict, Any]:
+    """结构化字段优先于 ``_raw`` JSON，同时显式记录冲突。"""
+
     raw = record.get("_raw", "")
-    java_log = parse_java_log(raw)
-    warnings: list[str] = []
     fields = dict(record)
-    # _raw 可补全 Splunk 未提取的字段；冲突时优先提取字段，同时留下告警。
-    if isinstance(raw, str) and raw.lstrip().startswith("{"):
-        try:
-            raw_fields = json.loads(raw)
-            if isinstance(raw_fields, dict):
-                conflicts = [
-                    k for k in raw_fields if k in fields and fields[k] != raw_fields[k]
-                ]
-                if conflicts:
-                    warnings.append(
-                        "提取字段与 _raw 冲突，优先提取字段：" + ", ".join(conflicts)
-                    )
-                fields = {**raw_fields, **fields}
-        except json.JSONDecodeError:
-            warnings.append("_raw JSON 无法解析，已保留原文")
-    service = str(
-        fields.get("appName") or fields.get("app") or fields.get("service") or "unknown"
+    if not isinstance(raw, str) or not raw.lstrip().startswith("{"):
+        return fields, raw
+    try:
+        raw_fields = json.loads(raw)
+    except json.JSONDecodeError:
+        warnings.append("_raw JSON 无法解析，已保留原文")
+        return fields, raw
+    if not isinstance(raw_fields, dict):
+        return fields, raw
+    conflicts = [
+        key for key in raw_fields if key in fields and fields[key] != raw_fields[key]
+    ]
+    if conflicts:
+        warnings.append("提取字段与 _raw 冲突，优先提取字段：" + ", ".join(conflicts))
+    return {**raw_fields, **fields}, raw
+
+
+def _payloads(fields: dict, java_log, warnings: list[str]) -> tuple[Any, Any]:
+    request = _first_value(fields, REQUEST_FIELDS)
+    response = _first_value(fields, RESPONSE_FIELDS)
+    request = java_log.request if request is None else request
+    response = java_log.response if response is None else response
+    return decode_payload(request, warnings), decode_payload(response, warnings)
+
+
+def _id_from_raw(raw: Any, key: str) -> str:
+    if not isinstance(raw, str):
+        return ""
+    # 空字段后常紧跟下一个 ``key=value``，不能把下一个 key 当作当前 ID。
+    match = re.search(
+        rf"\b{re.escape(key)}[ \t]*[=:][ \t]*[\"']?"
+        rf"(?:\[(?P<bracket>[\w.:/-]+)]|"
+        rf"(?![A-Za-z][\w.-]*[=:])(?P<plain>[\w.:/-]+))",
+        raw,
     )
-    service = config.get("service_aliases", {}).get(service, service)
-    request = next(
-        (
-            fields[k]
-            for k in ("reqMessage", "request", "serviceData", "CM_PARAM")
-            if fields.get(k) is not None
-        ),
-        None,
-    )
-    if request is None:
-        request = java_log.request
-    response = next(
-        (
-            fields[k]
-            for k in ("response", "respMessage", "responseBody")
-            if fields.get(k) is not None
-        ),
-        None,
-    )
-    if response is None:
-        response = java_log.response
-    request = decode_payload(request, warnings)
-    response = decode_payload(response, warnings)
+    if not match:
+        return ""
+    return match.group("bracket") or match.group("plain")
+
+
+def _identifiers(
+    fields: dict,
+    request: Any,
+    response: Any,
+    raw: Any,
+    java_log,
+    config: dict,
+) -> dict[str, str]:
     ids = dict(java_log.identifiers)
-    id_fields = set(config["correlation_fields"]) | {
-        "contextId",
-        "x_request_id",
-        "sequenceNumber",
-        "traceparent",
-        "spanId",
-        "parentSpanId",
-    }
-    for key, value in (
-        list(walk_fields(request)) + list(walk_fields(response)) + list(fields.items())
-    ):
+    id_fields = set(config["correlation_fields"]) | DEFAULT_ID_FIELDS
+    values = chain(walk_fields(request), walk_fields(response), fields.items())
+    for key, value in values:
         if (
             key in id_fields
             and isinstance(value, (str, int))
@@ -194,24 +208,23 @@ def normalize(record: dict, config: dict) -> Event:
         ):
             ids[key] = str(value)
     for key in id_fields:
-        if key not in ids and isinstance(raw, str):
-            # 空字段后常紧跟下一个 ``key=value``，不能把下一个 key 当作当前 ID。
-            match = re.search(
-                rf"\b{re.escape(key)}[ \t]*[=:][ \t]*[\"']?"
-                rf"(?:\[(?P<bracket>[\w.:/-]+)]|"
-                rf"(?![A-Za-z][\w.-]*[=:])(?P<plain>[\w.:/-]+))",
-                raw,
-            )
-            if match:
-                ids[key] = match.group("bracket") or match.group("plain")
-    correlation_ids = {ids[k] for k in config["correlation_fields"] if k in ids}
+        if key not in ids and (value := _id_from_raw(raw, key)):
+            ids[key] = value
+    return ids
+
+
+def _correlation_ids(ids: dict[str, str], service: str, config: dict) -> list[str]:
+    values = {ids[key] for key in config["correlation_fields"] if key in ids}
     if service in config.get("composite_id_services", []) and ":" in ids.get(
         "seqNo", ""
     ):
         root, business_id = ids["seqNo"].split(":", 1)
-        correlation_ids.add(root)
+        values.add(root)
         ids["businessSequence"] = business_id
-    message = str(fields.get("message") or java_log.message or raw)
+    return sorted(values)
+
+
+def _exception(fields: dict, raw: Any) -> dict | None:
     # Java 日志框架对异常字段命名不统一。按信息完整度选择第一个非空来源，
     # message/throwable 是结构化日志里很常见的两种形式。
     exception_text = str(
@@ -222,50 +235,54 @@ def normalize(record: dict, config: dict) -> Event:
         or fields.get("message")
     )
     matches = extract_exceptions(exception_text)
-    exception = None
-    if matches:
-        exception = {
-            "type": matches[0][0],
-            "message": matches[0][1],
-            "causes": [
-                {"type": kind, "message": message} for kind, message in matches[1:]
-            ],
-            "stack": exception_text,
-        }
+    if not matches:
+        return None
+    first_type, first_message = matches[0]
+    return {
+        "type": first_type,
+        "message": first_message,
+        "causes": [{"type": kind, "message": message} for kind, message in matches[1:]],
+        "stack": exception_text,
+    }
+
+
+def _event_kind(
+    fields: dict,
+    java_log,
+    exception: dict | None,
+    request: Any,
+    response: Any,
+    message: str,
+) -> str:
     kind = str(fields.get("eventType", "")).lower()
-    if kind not in ("request", "response", "exception"):
-        if exception:
-            kind = "exception"
-        elif java_log.kind:
-            kind = java_log.kind
-        elif response is not None or RESPONSE_MESSAGE.search(message):
-            kind = "response"
-        elif request is not None or REQUEST_MESSAGE.search(message):
-            kind = "request"
-        else:
-            kind = "log"
-    status = parse_http_status(
-        fields.get(
-            "httpStatus",
-            fields.get("statusCode", fields.get("status", java_log.http_status)),
+    if kind in ("request", "response", "exception"):
+        return kind
+    if exception:
+        return "exception"
+    if java_log.kind:
+        return java_log.kind
+    if response is not None or RESPONSE_MESSAGE.search(message):
+        return "response"
+    if request is not None or REQUEST_MESSAGE.search(message):
+        return "request"
+    return "log"
+
+
+def _business_code(fields: dict, response: Any) -> Any:
+    direct = _first_value(fields, ("businessCode", "errorCode"))
+    if direct is not None:
+        return direct
+    return next(
+        (
+            value
+            for key, value in walk_fields(response)
+            if key in ("code", "returnCode", "errorCode")
         ),
-        warnings,
+        None,
     )
-    business_code = fields.get("businessCode", fields.get("errorCode"))
-    if business_code is None:
-        business_code = next(
-            (
-                v
-                for k, v in walk_fields(response)
-                if k in ("code", "returnCode", "errorCode")
-            ),
-            None,
-        )
-    timestamp = normalize_time(
-        fields.get("_time", fields.get("timestamp", java_log.timestamp))
-    )
-    if not timestamp:
-        warnings.append("事件缺少时间")
+
+
+def _event_id(record: dict) -> str:
     if record.get("_cd"):
         identity = {
             key: record.get(key)
@@ -278,64 +295,74 @@ def normalize(record: dict, config: dict) -> Event:
     stable_content = json.dumps(
         identity, sort_keys=True, ensure_ascii=False, default=str
     )
-    event_id = "ev_" + hashlib.sha256(stable_content.encode()).hexdigest()[:16]
+    return "ev_" + hashlib.sha256(stable_content.encode()).hexdigest()[:16]
+
+
+def normalize(record: dict, config: dict) -> Event:
+    """把一条异构 Splunk 记录转换成稳定的领域事件。"""
+
+    warnings: list[str] = []
+    fields, raw = _merge_raw_fields(record, warnings)
+    java_log = parse_java_log(raw)
+    request, response = _payloads(fields, java_log, warnings)
+    service = str(
+        fields.get("appName") or fields.get("app") or fields.get("service") or "unknown"
+    )
+    service = config.get("service_aliases", {}).get(service, service)
+    ids = _identifiers(fields, request, response, raw, java_log, config)
+    message = str(fields.get("message") or java_log.message or raw)
+    exception = _exception(fields, raw)
+    timestamp_value = _first_value(fields, ("_time", "timestamp"))
+    timestamp_value = java_log.timestamp if timestamp_value is None else timestamp_value
+    timestamp = normalize_time(timestamp_value)
+    status_value = _first_value(fields, ("httpStatus", "statusCode", "status"))
+    status_value = java_log.http_status if status_value is None else status_value
+    if not timestamp:
+        warnings.append("事件缺少时间")
+
+    api = fields.get("serviceId") or fields.get("path")
+    api = api or fields.get("x_envoy_original_path") or java_log.api or ""
+    method = fields.get("IN_METHOD") or fields.get("method") or java_log.method or ""
+    direction = _first_value(fields, ("direction", "callDirection", "logDirection"))
+    direction = direction or java_log.direction or "unknown"
+    peer_service = _first_value(
+        fields,
+        ("peerService", "peer_service", "targetService", "downstreamService"),
+    )
+    peer_service = peer_service or java_log.peer_service or ""
+    call_id = fields.get("callId") or fields.get("spanId")
+    call_id = call_id or ids.get("x_b3_spanid") or ""
+    parent_call_id = fields.get("parentCallId") or fields.get("parentSpanId")
+    parent_call_id = parent_call_id or ids.get("x_b3_parentspanid") or ""
+    business_code = _business_code(fields, response)
+    source = {
+        key: fields[key]
+        for key in ("index", "source", "sourcetype", "_cd", "_bkt")
+        if key in fields
+    }
+
     return Event(
-        id=event_id,
+        id=_event_id(record),
         timestamp=timestamp,
         service=service,
         instance=str(fields.get("pod") or fields.get("host") or ""),
         ids=ids,
-        correlation_ids=sorted(correlation_ids),
-        api=str(
-            fields.get("serviceId")
-            or fields.get("path")
-            or fields.get("x_envoy_original_path")
-            or java_log.api
-            or ""
-        ),
-        method=str(
-            fields.get("IN_METHOD") or fields.get("method") or java_log.method or ""
-        ),
-        direction=str(
-            fields.get("direction")
-            or fields.get("callDirection")
-            or fields.get("logDirection")
-            or java_log.direction
-            or "unknown"
-        ).lower(),
-        kind=kind,
+        correlation_ids=_correlation_ids(ids, service, config),
+        api=str(api),
+        method=str(method),
+        direction=str(direction).lower(),
+        kind=_event_kind(fields, java_log, exception, request, response, message),
         level=str(fields.get("level") or java_log.level or "").upper(),
         message=message,
         request=request,
         response=response,
-        http_status=status,
+        http_status=parse_http_status(status_value, warnings),
         business_code=str(business_code) if business_code is not None else None,
         exception=exception,
-        peer_service=str(
-            fields.get("peerService")
-            or fields.get("peer_service")
-            or fields.get("targetService")
-            or fields.get("downstreamService")
-            or java_log.peer_service
-            or ""
-        ),
-        call_id=str(
-            fields.get("callId")
-            or fields.get("spanId")
-            or ids.get("x_b3_spanid")
-            or ""
-        ),
-        parent_call_id=str(
-            fields.get("parentCallId")
-            or fields.get("parentSpanId")
-            or ids.get("x_b3_parentspanid")
-            or ""
-        ),
+        peer_service=str(peer_service),
+        call_id=str(call_id),
+        parent_call_id=str(parent_call_id),
         attempt=str(fields.get("attempt") or fields.get("x_envoy_attempt_count") or ""),
-        source={
-            k: fields[k]
-            for k in ("index", "source", "sourcetype", "_cd", "_bkt")
-            if k in fields
-        },
+        source=source,
         parse_warnings=warnings,
     )

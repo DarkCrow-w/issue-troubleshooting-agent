@@ -10,62 +10,96 @@ from .budget import RunBudget, estimate_tokens
 from .state import InvestigationState
 
 
-def prepare_chunks(
-    state: InvestigationState, request: InvestigationRequest, config: dict, budget: RunBudget
-) -> list[list[dict]]:
-    events = sorted(state["events"].values(), key=time_key)
-    data = model_evidence(events, state["records"], request.cleaning_enabled, config["cleaning"])
-    budget.usage.before_chars = len(json.dumps(list(state["records"].values()), ensure_ascii=False))
-    budget.usage.after_chars = len(json.dumps(data, ensure_ascii=False))
-    # 为提示词、问题和一次格式修复预留空间，避免分块刚好塞满输入预算。
-    chunk_budget = max(500, budget.input_limit - 6000)
-    chunks, current, size = [], [], 0
+def _fragment_text(text: str, maximum_bytes: int) -> list[str]:
+    parts = []
+    current = ""
+    current_size = 0
+    for char in text:
+        char_size = len(char.encode())
+        if current and current_size + char_size > maximum_bytes:
+            parts.append(current)
+            current = ""
+            current_size = 0
+        current += char
+        current_size += char_size
+    if current:
+        parts.append(current)
+    return parts
+
+
+def _fragment_item(item: dict, serialized: str, chunk_budget: int) -> list[list[dict]]:
+    event_id = item.get("id", item.get("event_id"))
+    parts = _fragment_text(serialized, chunk_budget // 2)
+    return [
+        [
+            {
+                "event_id": event_id,
+                "fragment": part,
+                "part": index + 1,
+                "total_parts": len(parts),
+            }
+        ]
+        for index, part in enumerate(parts)
+    ]
+
+
+def _pack_items(data: list[dict], chunk_budget: int) -> list[list[dict]]:
+    chunks: list[list[dict]] = []
+    current: list[dict] = []
+    current_size = 0
     for item in data:
         serialized = json.dumps(item, ensure_ascii=False)
         item_size = estimate_tokens(serialized)
         if item_size > chunk_budget:
             if current:
                 chunks.append(current)
-                current, size = [], 0
-            event_id = item.get("id", item.get("event_id"))
-            # 超长记录按 UTF-8 字节预算分片，所有片段保留同一证据 ID，不静默截断。
-            piece = ""
-            piece_size = 0
-            parts = []
-            for char in serialized:
-                char_size = len(char.encode())
-                if piece_size + char_size > chunk_budget // 2:
-                    parts.append(piece)
-                    piece, piece_size = "", 0
-                piece += char
-                piece_size += char_size
-            if piece:
-                parts.append(piece)
-            for i, part in enumerate(parts):
-                chunks.append(
-                    [
-                        {
-                            "event_id": event_id,
-                            "fragment": part,
-                            "part": i + 1,
-                            "total_parts": len(parts),
-                        }
-                    ]
-                )
+                current = []
+                current_size = 0
+            chunks.extend(_fragment_item(item, serialized, chunk_budget))
             continue
-        if current and size + item_size > chunk_budget:
+        if current and current_size + item_size > chunk_budget:
             chunks.append(current)
-            current, size = [], 0
+            current = []
+            current_size = 0
         current.append(item)
-        size += item_size
+        current_size += item_size
     if current:
         chunks.append(current)
-    # 预算不足以分析全部材料时，优先处理包含失败信号的分块。
-    failed = {
-        f["event_id"]
-        for f in state["artifacts"].get("failure-localization", {}).get("failures", [])
+    return chunks
+
+
+def _prioritize_failures(chunks: list[list[dict]], state: InvestigationState) -> None:
+    failed_ids = {
+        failure["event_id"]
+        for failure in state["artifacts"]
+        .get("failure-localization", {})
+        .get("failures", [])
     }
     chunks.sort(
-        key=lambda chunk: not any(item.get("id", item.get("event_id")) in failed for item in chunk)
+        key=lambda chunk: (
+            not any(
+                item.get("id", item.get("event_id")) in failed_ids for item in chunk
+            )
+        )
     )
+
+
+def prepare_chunks(
+    state: InvestigationState,
+    request: InvestigationRequest,
+    config: dict,
+    budget: RunBudget,
+) -> list[list[dict]]:
+    events = sorted(state["events"].values(), key=time_key)
+    data = model_evidence(
+        events, state["records"], request.cleaning_enabled, config["cleaning"]
+    )
+    budget.usage.before_chars = len(
+        json.dumps(list(state["records"].values()), ensure_ascii=False)
+    )
+    budget.usage.after_chars = len(json.dumps(data, ensure_ascii=False))
+    # 为提示词、问题和一次格式修复预留空间，避免分块刚好塞满输入预算。
+    chunk_budget = max(500, budget.input_limit - 6000)
+    chunks = _pack_items(data, chunk_budget)
+    _prioritize_failures(chunks, state)
     return chunks

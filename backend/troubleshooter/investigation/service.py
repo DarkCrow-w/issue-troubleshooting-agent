@@ -42,6 +42,32 @@ class InvestigationService:
         self.settings, self.config, self.registry = settings, config, registry
         self.source, self.store, self.model_factory = source, store, model_factory
 
+    def _recursion_limit(self, request: InvestigationRequest, skill_count: int) -> int:
+        """业务预算限制实际调用，递归上限只负责防止错误连边造成死循环。"""
+
+        followups = self.settings.max_followups if request.followup_enabled else 0
+        return (
+            30 + (skill_count + 3) * (followups + 1) + 4 * self.settings.max_model_calls
+        )
+
+    async def _execute_graph(self, graph, state, task, recursion_limit):
+        # 禁止环境变量意外开启 LangSmith，避免公司日志发送到外部追踪服务。
+        with tracing_context(enabled=False):
+            async with asyncio.timeout(self.settings.task_timeout_seconds):
+                async for channel, data in graph.astream(
+                    state,
+                    stream_mode=["values", "updates"],
+                    config={"recursion_limit": recursion_limit},
+                ):
+                    if channel == "values":
+                        state = data
+                        continue
+                    task["steps"].extend(data.keys())
+                    for node in data:
+                        log_event("graph.node_completed", level=DEBUG, stage=node)
+        task["status"] = "partial" if state["warnings"] else "completed"
+        return state
+
     async def run(self, task: dict, request: InvestigationRequest, progress: Callable):
         """建立任务日志上下文；业务流程和收尾由下方方法负责。"""
         started = monotonic()
@@ -69,9 +95,14 @@ class InvestigationService:
         skills = self.registry.workflow(request.workflow)
         budget = RunBudget(self.settings)
         model = self.model_factory(self.settings, budget)
-        collector = EvidenceCollector(self.source, self.store, self.config, budget, task["id"])
+        collector = EvidenceCollector(
+            self.source, self.store, self.config, budget, task["id"]
+        )
         planner = FollowupPlanner(
-            request, next((s for s in skills if s.kind == "followup"), None), model, budget
+            request,
+            next((s for s in skills if s.kind == "followup"), None),
+            model,
+            budget,
         )
         models = ModelSteps(request, skills, model)
         state = initial_state(request)
@@ -82,39 +113,26 @@ class InvestigationService:
             task.update(phase=message, usage=budget.usage.model_dump())
             progress(task)
 
-        graph = build_graph(request, self.config, skills, budget, collector, planner, models, phase)
-        # 业务预算控制实际查询次数；图递归上限额外防止错误连边造成死循环。
-        followup_rounds = self.settings.max_followups if request.followup_enabled else 0
-        recursion_limit = (
-            30
-            + (len(skills) + 3) * (followup_rounds + 1)
-            + 4 * self.settings.max_model_calls
+        graph = build_graph(
+            request, self.config, skills, budget, collector, planner, models, phase
         )
+        recursion_limit = self._recursion_limit(request, len(skills))
         try:
-            # 禁止环境变量意外开启 LangSmith，避免公司日志发送到外部追踪服务。
-            with tracing_context(enabled=False):
-                async with asyncio.timeout(self.settings.task_timeout_seconds):
-                    async for channel, data in graph.astream(
-                        state,
-                        stream_mode=["values", "updates"],
-                        config={"recursion_limit": recursion_limit},
-                    ):
-                        if channel == "values":
-                            state = data
-                        else:
-                            task["steps"].extend(data.keys())
-                            for node in data:
-                                log_event("graph.node_completed", level=DEBUG, stage=node)
-            task["status"] = "partial" if state["warnings"] else "completed"
+            state = await self._execute_graph(graph, state, task, recursion_limit)
         except TimeoutError:
             log_event("task.timeout", level=WARNING)
-            state["warnings"] = state["warnings"] + ["任务达到时间上限；报告仅包含已获取的证据"]
+            state["warnings"] = state["warnings"] + [
+                "任务达到时间上限；报告仅包含已获取的证据"
+            ]
             task["status"] = "partial"
         except asyncio.CancelledError:
             log_event("task.cancelled")
-            state["warnings"] = state["warnings"] + ["任务已取消，后续查询和模型调用已停止"]
+            state["warnings"] = state["warnings"] + [
+                "任务已取消，后续查询和模型调用已停止"
+            ]
             task["status"] = "cancelled"
-        except Exception as exc:
+        # 任务边界必须把未知实现错误转成可持久化的失败报告。
+        except Exception as exc:  # noqa: BLE001
             log_event("task.execution_failed", level=ERROR, error=exc)
             state["warnings"] = state["warnings"] + [
                 f"排查执行失败：{type(exc).__name__}，请检查服务端配置"
@@ -131,7 +149,8 @@ class InvestigationService:
         """清理失败不能覆盖已经完成的排查，也不能阻止报告入库。"""
         try:
             await model.close()
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001
+            # 第三方模型 adapter 的清理错误不能覆盖已经完成的排查结果。
             log_event("model.cleanup_failed", level=WARNING, error=exc)
             state["warnings"] += ["模型连接清理失败，已保留排查结果"]
             if task["status"] == "completed":
@@ -148,7 +167,9 @@ class InvestigationService:
         if skill.kind == "report":
             state["diagnoses"] = state["skill_results"]
             return state
-        state["artifacts"][skill.id] = [result.model_dump() for result in state["skill_results"]]
+        state["artifacts"][skill.id] = [
+            result.model_dump() for result in state["skill_results"]
+        ]
         return state
 
     def snapshot(self, skills) -> dict:
@@ -157,7 +178,9 @@ class InvestigationService:
                 json.dumps(self.config, sort_keys=True).encode()
             ).hexdigest(),
             "config": self.config,
-            "skills": [{"id": s.id, "version": s.version, "digest": s.digest} for s in skills],
+            "skills": [
+                {"id": s.id, "version": s.version, "digest": s.digest} for s in skills
+            ],
             "model": self.settings.llm_model,
             "model_mode": "live",
             "source_mode": "splunk",

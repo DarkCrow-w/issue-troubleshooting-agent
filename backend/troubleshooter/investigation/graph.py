@@ -50,7 +50,9 @@ def build_graph(
 
     async def analyse(state):
         skill = models.skills[state["skill_index"]]
-        progress(f"执行 {skill.id}：证据分块 {state['chunk_index'] + 1}/{len(state['chunks'])}")
+        progress(
+            f"执行 {skill.id}：证据分块 {state['chunk_index'] + 1}/{len(state['chunks'])}"
+        )
         return await models.analyse_chunk(state)
 
     def after_prepare(state):
@@ -61,7 +63,9 @@ def build_graph(
         return "analyse_chunk" if more else "finish_skill"
 
     def after_skill(state):
-        return "analyse_chunk" if state["skill_index"] < len(models.skills) else "report"
+        return (
+            "analyse_chunk" if state["skill_index"] < len(models.skills) else "report"
+        )
 
     builder.add_node("retrieve", retrieve)
     builder.add_edge(START, "retrieve")
@@ -70,7 +74,9 @@ def build_graph(
         if skill.kind != "code":
             continue
         name = f"extract_{skill.id}"
-        builder.add_node(name, partial(execute_code_skill, skill=skill, domain_config=config))
+        builder.add_node(
+            name, partial(execute_code_skill, skill=skill, domain_config=config)
+        )
         builder.add_edge(previous, name)
         previous = name
     if request.followup_enabled:
@@ -85,7 +91,9 @@ def build_graph(
         builder.add_edge(previous, "prepare_analysis")
     builder.add_node("prepare_analysis", prepare)
     builder.add_conditional_edges(
-        "prepare_analysis", after_prepare, {"analyse_chunk": "analyse_chunk", "report": "report"}
+        "prepare_analysis",
+        after_prepare,
+        {"analyse_chunk": "analyse_chunk", "report": "report"},
     )
     builder.add_node("analyse_chunk", analyse)
     builder.add_conditional_edges(
@@ -95,7 +103,9 @@ def build_graph(
     )
     builder.add_node("finish_skill", models.finish_skill)
     builder.add_conditional_edges(
-        "finish_skill", after_skill, {"analyse_chunk": "analyse_chunk", "report": "report"}
+        "finish_skill",
+        after_skill,
+        {"analyse_chunk": "analyse_chunk", "report": "report"},
     )
     builder.add_node("report", lambda state: {"report": build_report(state)})
     builder.add_edge("report", END)

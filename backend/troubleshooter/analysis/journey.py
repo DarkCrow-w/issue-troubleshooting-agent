@@ -12,6 +12,12 @@ STAGE_META = {
     "cm": ("CM 内部", "CM 服务内部处理与服务间调用"),
     "downstream": ("下游", "CM 发起的外部 API 调用"),
 }
+ATTRIBUTION_LABELS = {
+    "upstream": "上游输入 / 入口处理",
+    "cm": "CM 内部处理 / 调用",
+    "downstream": "下游 API 调用",
+    "unknown": "故障位置待确认",
+}
 
 
 def _matches(service: str, patterns: list[str]) -> bool:
@@ -218,6 +224,47 @@ def _external_peer_nodes(nodes: list[dict], config: dict) -> list[dict]:
     return peers
 
 
+def _no_failure_attribution() -> dict:
+    return {
+        "domain": "none",
+        "label": "未观测到明确失败",
+        "summary": "当前日志没有出现异常、HTTP 错误或非成功业务码。",
+        "confidence": "low",
+        "node_id": "",
+        "evidence_ids": [],
+        "phase": "",
+        "phase_label": "",
+        "caution": "未观测到失败不等同于交易成功，仍受日志覆盖范围限制。",
+    }
+
+
+def _cm_failure_location(
+    node: dict,
+    event: Event | None,
+    edges: list[dict],
+    reasons: list[str],
+    config: dict,
+) -> tuple[str, str, str]:
+    """返回故障域、可信度和前端应高亮的节点。"""
+
+    phase = node.get("failure_phase", "unknown")
+    if phase == "response_processing":
+        return "cm", "high", node["id"]
+    if _is_downstream_call(node, config):
+        if phase == "response":
+            return "downstream", "high", f"peer-{node['id']}"
+        # 请求发出后未收到响应，无法区分本地、网络和下游故障。
+        return "unknown", "low", node["id"]
+
+    incoming = {edge["target"] for edge in edges}
+    upstream_failure = _is_upstream_input_failure(
+        event, node, incoming, reasons, config
+    )
+    if upstream_failure:
+        return "upstream", "medium", "boundary-upstream"
+    return "cm", "medium", node["id"]
+
+
 def _fault_attribution(
     events: list[Event],
     nodes: list[dict],
@@ -226,79 +273,33 @@ def _fault_attribution(
     config: dict,
 ) -> dict:
     if earliest is None:
-        return {
-            "domain": "none",
-            "label": "未观测到明确失败",
-            "summary": "当前日志没有出现异常、HTTP 错误或非成功业务码。",
-            "confidence": "low",
-            "node_id": "",
-            "evidence_ids": [],
-            "phase": "",
-            "phase_label": "",
-            "caution": "未观测到失败不等同于交易成功，仍受日志覆盖范围限制。",
-        }
+        return _no_failure_attribution()
 
+    event_id = earliest["event_id"]
     node = next(
-        (
-            item
-            for item in nodes
-            if earliest["event_id"] in item.get("evidence_ids", [])
-        ),
-        None,
+        (item for item in nodes if event_id in item.get("evidence_ids", [])), None
     )
-    event = next((item for item in events if item.id == earliest["event_id"]), None)
+    event = next((item for item in events if item.id == event_id), None)
     role = node["role"] if node else "unknown"
-    domain = role
-    confidence = "high" if role in ("upstream", "downstream") else "medium"
     phase = node.get("failure_phase", "unknown") if node else "unknown"
     phase_label = node.get("failure_phase_label", "未知阶段") if node else "未知阶段"
 
+    domain = role
+    node_id = node["id"] if node else ""
+    confidence = "high" if role in ("upstream", "downstream") else "medium"
     if role == "cm" and node:
-        # 下游成功返回后再报错，故障在 CM 的响应处理逻辑中。
-        if phase == "response_processing":
-            domain = "cm"
-            confidence = "high"
-            node_id = node["id"]
-        elif _is_downstream_call(node, config):
-            if phase == "response":
-                domain = "downstream"
-                confidence = "high"
-                node_id = f"peer-{node['id']}"
-            else:
-                # 只有“发出请求后未收到响应”的异常，无法区分本地、网络和下游故障。
-                domain = "unknown"
-                confidence = "low"
-                node_id = node["id"]
-        else:
-            incoming = {edge["target"] for edge in edges}
-            is_entry_input_failure = _is_upstream_input_failure(
-                event,
-                node,
-                incoming,
-                earliest["reasons"],
-                config,
-            )
-            domain = "upstream" if is_entry_input_failure else "cm"
-            confidence = "medium"
-            node_id = "boundary-upstream" if is_entry_input_failure else node["id"]
-    else:
-        node_id = node["id"] if node else ""
+        domain, confidence, node_id = _cm_failure_location(
+            node, event, edges, earliest["reasons"], config
+        )
 
-    labels = {
-        "upstream": "上游输入 / 入口处理",
-        "cm": "CM 内部处理 / 调用",
-        "downstream": "下游 API 调用",
-        "unknown": "故障位置待确认",
-    }
     return {
         "domain": domain,
-        "label": labels.get(domain, labels["unknown"]),
+        "label": ATTRIBUTION_LABELS.get(domain, ATTRIBUTION_LABELS["unknown"]),
         "summary": f"最早失败出现在 {earliest['service']} {earliest['api'] or '未知 API'}"
-        f"的{phase_label}："
-        + "；".join(earliest["reasons"]),
+        f"的{phase_label}：" + "；".join(earliest["reasons"]),
         "confidence": confidence,
         "node_id": node_id,
-        "evidence_ids": [earliest["event_id"]],
+        "evidence_ids": [event_id],
         "reasons": earliest["reasons"],
         "phase": phase,
         "phase_label": phase_label,

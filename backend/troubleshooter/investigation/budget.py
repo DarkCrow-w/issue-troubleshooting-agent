@@ -31,7 +31,9 @@ class RunBudget:
 
     @property
     def can_followup(self) -> bool:
-        return self.usage.followups < self.settings.max_followups and all(self.remaining_logs)
+        return self.usage.followups < self.settings.max_followups and all(
+            self.remaining_logs
+        )
 
     def record_query(self, count: int, size: int):
         self.usage.queries += 1

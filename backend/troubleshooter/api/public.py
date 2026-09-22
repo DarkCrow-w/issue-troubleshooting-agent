@@ -51,7 +51,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.post("/api/investigations", status_code=202)
     async def create(request: InvestigationRequest):
-        return await forward("POST", "/internal/investigations", request.model_dump(mode="json"))
+        return await forward(
+            "POST", "/internal/investigations", request.model_dump(mode="json")
+        )
 
     @app.get("/api/investigations/{task_id}")
     async def get(task_id: str):
@@ -63,6 +65,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.get("/api/investigations/{task_id}/evidence/{event_id}")
     async def evidence(task_id: str, event_id: str):
-        return await forward("GET", f"/internal/investigations/{task_id}/evidence/{event_id}")
+        return await forward(
+            "GET", f"/internal/investigations/{task_id}/evidence/{event_id}"
+        )
 
     return app

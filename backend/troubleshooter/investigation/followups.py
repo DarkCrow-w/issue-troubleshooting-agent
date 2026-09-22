@@ -36,25 +36,28 @@ def validate_proposal(
         if proposal.identifier not in list(event.ids.values()) + event.correlation_ids:
             return None
         query.identifier = proposal.identifier
-    else:
-        if (
-            not event.instance
-            or event.service == "unknown"
-            or event.id in state["context_searched"]
-        ):
-            return None
-        # 上下文补查必须收窄到同实例附近；用户填写时间时再应用上下界。
-        try:
-            timestamp = datetime.fromisoformat(event.timestamp)
-            context_start = timestamp - timedelta(seconds=2)
-            context_end = timestamp + timedelta(seconds=2)
-            query.start_time = (
-                max(request.start_time, context_start) if request.start_time else context_start
-            )
-            query.end_time = min(request.end_time, context_end) if request.end_time else context_end
-        except (ValueError, TypeError):
-            return None
-        query.service, query.instance = event.service, event.instance
+        return query
+
+    if (
+        not event.instance
+        or event.service == "unknown"
+        or event.id in state["context_searched"]
+    ):
+        return None
+    # 上下文补查必须收窄到同实例附近；用户填写时间时再应用上下界。
+    try:
+        timestamp = datetime.fromisoformat(event.timestamp)
+    except (ValueError, TypeError):
+        return None
+    context_start = timestamp - timedelta(seconds=2)
+    context_end = timestamp + timedelta(seconds=2)
+    query.start_time = (
+        max(request.start_time, context_start) if request.start_time else context_start
+    )
+    query.end_time = (
+        min(request.end_time, context_end) if request.end_time else context_end
+    )
+    query.service, query.instance = event.service, event.instance
     return query
 
 
@@ -74,10 +77,16 @@ def rule_proposals(state: InvestigationState) -> list[FollowupProposal]:
                         reason=f"沿事件中的 {key} 补查关联日志",
                     )
                 )
-        if event.exception and event.instance and event.id not in state["context_searched"]:
+        if (
+            event.exception
+            and event.instance
+            and event.id not in state["context_searched"]
+        ):
             candidates.append(
                 FollowupProposal(
-                    kind="context", evidence_id=event.id, reason="补齐异常前后同实例 2 秒上下文"
+                    kind="context",
+                    evidence_id=event.id,
+                    reason="补齐异常前后同实例 2 秒上下文",
                 )
             )
     return candidates
@@ -91,7 +100,68 @@ class FollowupPlanner:
         model: ModelCallInterface,
         budget: RunBudget,
     ):
-        self.request, self.skill, self.model, self.budget = request, skill, model, budget
+        self.request, self.skill, self.model, self.budget = (
+            request,
+            skill,
+            model,
+            budget,
+        )
+
+    async def _model_proposals(
+        self, state: InvestigationState, warnings: list[str]
+    ) -> list[FollowupProposal]:
+        if state["model_planned"] or not state["events"]:
+            return []
+        compact_events = [
+            {
+                "event_id": event.id,
+                "ids": event.ids,
+                "exception": bool(event.exception),
+                "service": event.service,
+            }
+            for event in list(state["events"].values())[:30]
+        ]
+        try:
+            return await self.model.propose_followups(
+                self.skill.prompt,
+                compact_events,
+                state["searched"],
+                set(state["events"]),
+            )
+        except ModelUnavailable as error:
+            warnings.append(str(error))
+            return []
+
+    def _schedule(
+        self,
+        proposals: list[FollowupProposal],
+        state: InvestigationState,
+        warnings: list[str],
+    ) -> dict:
+        update = {
+            "model_planned": True,
+            "warnings": warnings,
+            "next_query": None,
+            "proposals": [],
+        }
+        for index, proposal in enumerate(proposals):
+            query = validate_proposal(proposal, state, self.request)
+            if query is None:
+                continue
+            if not self.budget.can_followup:
+                update["notes"] = state["notes"] + ["补查达到配置预算；其余候选未执行"]
+                return update
+            self.budget.usage.followups += 1
+            update["next_query"] = query
+            update["proposals"] = proposals[index + 1 :]
+            if query.identifier:
+                update["searched"] = state["searched"] | {query.identifier}
+            else:
+                update["context_searched"] = state["context_searched"] | {
+                    query.evidence_id
+                }
+            return update
+        return update
 
     async def plan(self, state: InvestigationState) -> dict:
         # 补查必须由用户主动开启；默认只分析首次查询返回的日志。
@@ -101,41 +171,7 @@ class FollowupPlanner:
             return {"next_query": None}
         warnings = list(state["warnings"])
         proposals = list(state["proposals"])
-        if not state["model_planned"] and state["events"]:
-            compact = [
-                {
-                    "event_id": e.id,
-                    "ids": e.ids,
-                    "exception": bool(e.exception),
-                    "service": e.service,
-                }
-                for e in list(state["events"].values())[:30]
-            ]
-            try:
-                model_proposals = await self.model.propose_followups(
-                    self.skill.prompt,
-                    compact,
-                    state["searched"],
-                    set(state["events"]),
-                )
-                proposals.extend(model_proposals)
-            except ModelUnavailable as exc:
-                warnings.append(str(exc))
+        proposals.extend(await self._model_proposals(state, warnings))
         # 模型建议校验不通过时，规则候选仍可执行；两者使用同一套预算和去重状态。
         proposals.extend(rule_proposals(state))
-        update = {"model_planned": True, "warnings": warnings, "next_query": None, "proposals": []}
-        for index, proposal in enumerate(proposals):
-            query = validate_proposal(proposal, state, self.request)
-            if query is None:
-                continue
-            if not self.budget.can_followup:
-                update["notes"] = state["notes"] + ["补查达到配置预算；其余候选未执行"]
-                return update
-            self.budget.usage.followups += 1
-            update.update(next_query=query, proposals=proposals[index + 1 :])
-            if query.identifier:
-                update["searched"] = state["searched"] | {query.identifier}
-            else:
-                update["context_searched"] = state["context_searched"] | {query.evidence_id}
-            return update
-        return update
+        return self._schedule(proposals, state, warnings)

@@ -30,12 +30,16 @@ def _sample_positions(positions: list[int], limit: int) -> list[int]:
         return positions
     if limit <= 1:
         return [positions[-1]]
-    indexes = {round(index * (len(positions) - 1) / (limit - 1)) for index in range(limit)}
+    indexes = {
+        round(index * (len(positions) - 1) / (limit - 1)) for index in range(limit)
+    }
     return [positions[index] for index in sorted(indexes)]
 
 
 def _merge_ranges(ranges: list[tuple[int, int]], total: int) -> list[tuple[int, int]]:
-    normalized = sorted((max(0, start), min(total, end)) for start, end in ranges if start < end)
+    normalized = sorted(
+        (max(0, start), min(total, end)) for start, end in ranges if start < end
+    )
     merged: list[list[int]] = []
     for start, end in normalized:
         if merged and start <= merged[-1][1]:
@@ -210,7 +214,10 @@ def model_evidence(
         for key in ("request", "response", "exception"):
             if key not in item:
                 continue
-            fingerprint = (key, json.dumps(item[key], sort_keys=True, ensure_ascii=False))
+            fingerprint = (
+                key,
+                json.dumps(item[key], sort_keys=True, ensure_ascii=False),
+            )
             if fingerprint in payloads:
                 item[key] = {"same_content_as": payloads[fingerprint], "field": key}
             else:

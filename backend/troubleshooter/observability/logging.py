@@ -36,7 +36,9 @@ _ALLOWED_FIELDS = {
 class JsonFormatter(logging.Formatter):
     def format(self, record):
         entry = {
-            "timestamp": datetime.fromtimestamp(record.created, timezone.utc).isoformat(),
+            "timestamp": datetime.fromtimestamp(
+                record.created, timezone.utc
+            ).isoformat(),
             "level": record.levelname,
             "event": record.msg,
             "task_id": getattr(record, "task_id", None),
@@ -72,15 +74,23 @@ def task_context(task_id: str):
         _task_id.reset(token)
 
 
-def log_event(event: str, *, level: int = logging.INFO, error: Exception | None = None, **fields):
-    safe_fields = {key: value for key, value in fields.items() if key in _ALLOWED_FIELDS}
+def log_event(
+    event: str, *, level: int = logging.INFO, error: Exception | None = None, **fields
+):
+    safe_fields = {
+        key: value for key, value in fields.items() if key in _ALLOWED_FIELDS
+    }
     extra = {"task_id": _task_id.get(), "fields": safe_fields}
     if error is not None:
         # 保留错误类型和代码位置，不输出可能包含密码/日志正文的异常消息及局部变量。
         extra["safe_error"] = {
             "error_type": type(error).__name__,
             "error_frames": [
-                {"file": Path(frame.filename).name, "line": frame.lineno, "function": frame.name}
+                {
+                    "file": Path(frame.filename).name,
+                    "line": frame.lineno,
+                    "function": frame.name,
+                }
                 for frame in traceback.extract_tb(error.__traceback__)[-8:]
             ],
         }

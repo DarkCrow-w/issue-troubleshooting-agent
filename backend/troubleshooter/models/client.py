@@ -30,7 +30,9 @@ class JsonModel(Protocol):
 
 
 class ModelClient:
-    def __init__(self, settings: Settings, budget: RunBudget, model: BaseChatModel | None = None):
+    def __init__(
+        self, settings: Settings, budget: RunBudget, model: BaseChatModel | None = None
+    ):
         self.settings = settings
         self.budget = budget
         self._model = model
@@ -72,9 +74,16 @@ class ModelClient:
                 validate_references(result.model_dump(), valid_ids)
                 return result
             except (OutputParserException, ValueError) as exc:
-                log_event("model.output_rejected", level=WARNING, attempt=attempt + 1, error=exc)
+                log_event(
+                    "model.output_rejected",
+                    level=WARNING,
+                    attempt=attempt + 1,
+                    error=exc,
+                )
                 if attempt:
-                    raise ModelUnavailable("模型输出或证据引用校验失败，已放弃该分析") from None
+                    raise ModelUnavailable(
+                        "模型输出或证据引用校验失败，已放弃该分析"
+                    ) from None
                 messages.append(
                     HumanMessage(
                         content="上一次输出未通过格式或证据引用验证。请按给定 schema 重新输出，引用只能来自输入证据。"
@@ -97,8 +106,11 @@ class ModelClient:
             estimated_input_tokens=estimate_tokens(serialized),
         )
         try:
-            response = await model.ainvoke(messages, config={"run_name": "diagnose_json"})
-        except Exception as exc:
+            response = await model.ainvoke(
+                messages, config={"run_name": "diagnose_json"}
+            )
+        # 不同模型 SDK 的异常没有稳定基类，统一转换为安全的领域错误。
+        except Exception as exc:  # noqa: BLE001
             # 供应商异常可能带 URL、凭据或正文；仅记录错误类型与安全的代码位置。
             log_event(
                 "model.request_failed",

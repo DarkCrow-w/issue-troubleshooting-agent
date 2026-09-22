@@ -44,7 +44,9 @@ def test_followup_is_disabled_by_default():
 
 
 def test_langgraph_only_adds_followup_node_when_user_enables_it():
-    default_request = InvestigationRequest(correlation_id="trace-001", environment="sit")
+    default_request = InvestigationRequest(
+        correlation_id="trace-001", environment="sit"
+    )
     enabled_request = default_request.model_copy(update={"followup_enabled": True})
 
     assert "plan_followup" not in _graph_nodes(default_request)
