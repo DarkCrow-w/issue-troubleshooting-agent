@@ -1016,6 +1016,7 @@ li + li {
 .timeline time {
   font: 11px monospace;
   color: #888;
+  white-space: nowrap;
 }
 .timeline button > div {
   flex: 1;

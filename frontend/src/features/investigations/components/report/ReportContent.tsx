@@ -32,7 +32,11 @@ function Timeline({
         // 统一使用业务时区，不能随用户电脑时区改变日志显示顺序的含义。
         const time = new Date(event.timestamp).toLocaleTimeString("zh-CN", {
           timeZone: "Asia/Shanghai",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
           fractionalSecondDigits: 3,
+          hour12: false,
         });
         return (
           <button
