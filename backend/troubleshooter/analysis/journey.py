@@ -229,12 +229,60 @@ def _no_failure_attribution() -> dict:
         "domain": "none",
         "label": "未观测到明确失败",
         "summary": "当前日志没有出现异常、HTTP 错误或非成功业务码。",
+        "conclusion": {
+            "title": "暂未发现明确故障环节",
+            "detail": "当前日志中没有观察到异常、HTTP 错误或非成功业务码。",
+            "owner": "待确认",
+            "action": "如果交易结果仍然异常，请补充更完整的调用日志或扩大查询范围。",
+        },
         "confidence": "low",
         "node_id": "",
         "evidence_ids": [],
         "phase": "",
         "phase_label": "",
         "caution": "未观测到失败不等同于交易成功，仍受日志覆盖范围限制。",
+    }
+
+
+def _actionable_conclusion(
+    domain: str,
+    node: dict | None,
+    earliest: dict,
+    phase_label: str,
+) -> dict:
+    """把技术归因翻译成用户可以直接转交给对应团队的结论。"""
+
+    service = (node or {}).get("service") or earliest.get("service") or "未知服务"
+    api = (node or {}).get("api") or earliest.get("api") or "未知 API"
+    peer = (node or {}).get("peer_service") or "下游系统"
+    reasons = "；".join(earliest.get("reasons", [])) or "检测到失败信号"
+
+    if domain == "upstream":
+        return {
+            "title": "上游到 CM 的请求出现问题",
+            "detail": f"CM 在 {service} {api} 的{phase_label}发现输入异常：{reasons}。",
+            "owner": "上游系统",
+            "action": "请联系上游系统支持团队，检查传入 CM 的请求参数、必填字段和报文格式。",
+        }
+    if domain == "cm":
+        return {
+            "title": f"CM 内部 {service} 出现问题",
+            "detail": f"故障发生在 {service} {api} 的{phase_label}：{reasons}。",
+            "owner": "CM Support",
+            "action": f"请联系 CM Support 排查 {service} 的业务处理和异常日志。",
+        }
+    if domain == "downstream":
+        return {
+            "title": "CM 访问下游 API 时出现问题",
+            "detail": f"访问 {peer} {api} 的{phase_label}失败：{reasons}。",
+            "owner": "下游 Support",
+            "action": "请联系下游 Support 核查接口响应、业务返回码和服务状态。",
+        }
+    return {
+        "title": "故障环节暂时无法确认",
+        "detail": f"在 {service} {api} 的{phase_label}观察到失败：{reasons}。",
+        "owner": "联合排查",
+        "action": "请补充缺失的请求、响应或父子调用标识，再由相关团队联合排查。",
     }
 
 
@@ -297,6 +345,7 @@ def _fault_attribution(
         "label": ATTRIBUTION_LABELS.get(domain, ATTRIBUTION_LABELS["unknown"]),
         "summary": f"最早失败出现在 {earliest['service']} {earliest['api'] or '未知 API'}"
         f"的{phase_label}：" + "；".join(earliest["reasons"]),
+        "conclusion": _actionable_conclusion(domain, node, earliest, phase_label),
         "confidence": confidence,
         "node_id": node_id,
         "evidence_ids": [event_id],

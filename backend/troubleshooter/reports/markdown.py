@@ -27,8 +27,17 @@ def _table_row(values) -> str:
 
 def _journey_lines(journey: dict) -> list[str]:
     attribution = journey.get("attribution", {})
+    conclusion = attribution.get("conclusion", {})
     lines = [
         "# 交易排查报告",
+        "",
+        "## 明确结论",
+        "",
+        f"**{conclusion.get('title', attribution.get('label', '故障位置待确认'))}**",
+        "",
+        conclusion.get("detail", attribution.get("summary", "尚未生成链路定位结果。")),
+        "",
+        f"处理建议：{conclusion.get('action', '请结合完整日志继续排查。')}",
         "",
         "## 交易链路定位",
         "",

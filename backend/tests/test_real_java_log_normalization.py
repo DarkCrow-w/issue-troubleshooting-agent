@@ -264,3 +264,4 @@ def test_real_format_builds_call_tree_and_attributes_downstream_failure():
     assert len(artifacts["trace-reconstruction"]["edges"]) == 2
     assert journey["attribution"]["domain"] == "downstream"
     assert journey["attribution"]["phase"] == "response"
+    assert journey["attribution"]["conclusion"]["owner"] == "下游 Support"

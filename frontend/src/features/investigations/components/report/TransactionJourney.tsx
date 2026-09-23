@@ -361,6 +361,180 @@ function JourneyStageNodes({
   ));
 }
 
+type RouteId =
+  | "upstream-request"
+  | "downstream-request"
+  | "downstream-response"
+  | "upstream-response";
+
+const routeStatusLabels: Record<JourneyStatus, string> = {
+  success: "正常",
+  failed: "故障",
+  affected: "受影响",
+  warning: "证据不足",
+  unknown: "未观测",
+};
+
+const routeStatusPriority: Record<JourneyStatus, number> = {
+  failed: 5,
+  affected: 4,
+  warning: 3,
+  success: 2,
+  unknown: 1,
+};
+
+function phaseStatus(
+  nodes: JourneyNode[],
+  phase: keyof NonNullable<JourneyNode["phases"]>,
+): JourneyStatus {
+  const statuses = nodes
+    .map((node) => node.phases?.[phase].status)
+    .filter((status): status is JourneyStatus => Boolean(status));
+  if (!statuses.length) return "unknown";
+  return statuses.reduce((current, status) =>
+    routeStatusPriority[status] > routeStatusPriority[current]
+      ? status
+      : current,
+  );
+}
+
+function faultRoute(journey: Journey): RouteId | undefined {
+  const { domain, phase } = journey.attribution;
+  if (domain === "upstream") return "upstream-request";
+  if (domain !== "downstream") return undefined;
+  return phase === "request" || phase === "request_processing"
+    ? "downstream-request"
+    : "downstream-response";
+}
+
+function routeStatuses(journey: Journey): Record<RouteId, JourneyStatus> {
+  const upstream = journey.stages.find((stage) => stage.id === "upstream")?.nodes ?? [];
+  const cm = journey.stages.find((stage) => stage.id === "cm")?.nodes ?? [];
+  const downstream =
+    journey.stages.find((stage) => stage.id === "downstream")?.nodes ?? [];
+  const inboundCm = cm.filter((node) => node.direction === "inbound");
+  const outboundCm = cm.filter((node) => node.direction === "outbound");
+  const entryNodes = [...upstream, ...(inboundCm.length ? inboundCm : cm)];
+  const downstreamCalls = outboundCm.length ? outboundCm : downstream;
+  const raw: Record<RouteId, JourneyStatus> = {
+    "upstream-request": phaseStatus(entryNodes, "request"),
+    "downstream-request": phaseStatus(downstreamCalls, "request"),
+    "downstream-response": phaseStatus(downstreamCalls, "response"),
+    "upstream-response": phaseStatus(entryNodes, "response"),
+  };
+  const fault = faultRoute(journey);
+  if (fault) raw[fault] = "failed";
+
+  // 红色只表示确定的故障边；其他失败状态表示错误传播，避免多个“根因”。
+  Object.keys(raw).forEach((id) => {
+    const routeId = id as RouteId;
+    if (raw[routeId] === "failed" && routeId !== fault) {
+      raw[routeId] = "affected";
+    }
+  });
+  return raw;
+}
+
+function stageName(stage: Journey["stages"][number]): string {
+  const services = Array.from(
+    new Set(
+      stage.nodes
+        .map((node) => node.service)
+        .filter(
+          (service) =>
+            service &&
+            service !== "上游系统" &&
+            !service.startsWith("下游服务（"),
+        ),
+    ),
+  );
+  if (stage.id === "upstream") return services[0] ?? "上游系统";
+  if (stage.id === "downstream") return services[0] ?? "下游系统";
+  if (services.length === 1) return services[0];
+  return services.length > 1 ? `CM（${services.length} 个应用）` : "CM";
+}
+
+function RouteConnector({
+  status,
+  label,
+  direction,
+}: {
+  status: JourneyStatus;
+  label: string;
+  direction: "right" | "left";
+}) {
+  const Icon = direction === "right" ? ArrowRight : ArrowLeft;
+  return (
+    <div className={`route-connector ${direction} ${status}`} aria-label={`${label}：${routeStatusLabels[status]}`}>
+      <span>{label}</span>
+      <div>
+        <i />
+        <Icon size={18} />
+      </div>
+      <small>{routeStatusLabels[status]}</small>
+    </div>
+  );
+}
+
+function JourneyRoute({ journey }: { journey: Journey }) {
+  const stages = Object.fromEntries(journey.stages.map((stage) => [stage.id, stage]));
+  const names = {
+    upstream: stageName(stages.upstream),
+    cm: stageName(stages.cm),
+    downstream: stageName(stages.downstream),
+  };
+  const statuses = routeStatuses(journey);
+  return (
+    <div className="journey-route-panel">
+      <div className="journey-route-heading">
+        <strong>完整请求与返回路径</strong>
+        <span>箭头颜色表示每一段实际观测到的状态</span>
+      </div>
+      <div className="journey-route-scroll">
+        <div className="journey-route-map">
+          <span className="route-lane-label">请求</span>
+          <div className="route-stop">{names.upstream}</div>
+          <RouteConnector status={statuses["upstream-request"]} label="调用 CM" direction="right" />
+          <div className="route-stop">{names.cm}</div>
+          <RouteConnector status={statuses["downstream-request"]} label="调用下游" direction="right" />
+          <div className="route-stop">{names.downstream}</div>
+
+          <span className="route-lane-label response">返回</span>
+          <div className="route-stop response">{names.upstream}</div>
+          <RouteConnector status={statuses["upstream-response"]} label="返回上游" direction="left" />
+          <div className="route-stop response">{names.cm}</div>
+          <RouteConnector status={statuses["downstream-response"]} label="返回 CM" direction="left" />
+          <div className="route-stop response">{names.downstream}</div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function IssueConclusion({ attribution }: { attribution: Journey["attribution"] }) {
+  const conclusion = attribution.conclusion ?? {
+    title: attribution.label,
+    detail: attribution.summary,
+    owner: "待确认",
+    action: "请结合完整日志继续排查。",
+  };
+  const healthy = attribution.domain === "none";
+  return (
+    <div className={`issue-conclusion ${attribution.domain}`}>
+      <span className="issue-conclusion-label">
+        {healthy ? <CheckCircle2 size={16} /> : <CircleAlert size={16} />}
+        明确结论
+      </span>
+      <div className="issue-conclusion-title">
+        <h2>{conclusion.title}</h2>
+        <span>建议处理方：{conclusion.owner}</span>
+      </div>
+      <p>{conclusion.detail}</p>
+      <strong>{conclusion.action}</strong>
+    </div>
+  );
+}
+
 export default function TransactionJourney({
   journey,
   openEvidence,
@@ -384,6 +558,7 @@ export default function TransactionJourney({
   };
   return (
     <section className="journey-overview">
+      <IssueConclusion attribution={attribution} />
       <div className="journey-title">
         <div>
           <span className="eyebrow">TRANSACTION JOURNEY</span>
@@ -394,25 +569,21 @@ export default function TransactionJourney({
         </span>
       </div>
       <div className={`fault-summary ${attribution.domain}`}>
-        <strong>{attribution.summary}</strong>
+        <strong>证据定位：{attribution.summary}</strong>
         <span>
           归因可信度：{confidenceLabels[attribution.confidence] ?? "未知"} ·{" "}
           {attribution.caution}
         </span>
       </div>
+      <JourneyRoute journey={journey} />
       <div className="journey-direction-legend">
         <span><ArrowRight size={14} /> 请求向下游发送</span>
         <span><ArrowLeft size={14} /> 响应向调用方返回</span>
         <span><Settings2 size={14} /> 返回后由当前服务继续处理</span>
       </div>
       <div className="journey-stages">
-        {journey.stages.map((stage, index) => (
+        {journey.stages.map((stage) => (
           <div className="journey-stage-wrap" key={stage.id}>
-            {index > 0 && (
-              <div className="journey-arrow" aria-hidden="true">
-                <ArrowRight size={19} />
-              </div>
-            )}
             <section className={`journey-stage ${stage.status}`}>
               <header>
                 <div>

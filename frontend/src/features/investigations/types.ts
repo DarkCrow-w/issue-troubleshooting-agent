@@ -75,6 +75,12 @@ export interface TransactionJourney {
     node_id: string;
     evidence_ids: string[];
     caution: string;
+    conclusion?: {
+      title: string;
+      detail: string;
+      owner: string;
+      action: string;
+    };
     phase?: string;
     phase_label?: string;
   };

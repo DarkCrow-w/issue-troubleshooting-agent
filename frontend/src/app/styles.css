@@ -309,6 +309,75 @@ textarea::placeholder {
 .journey-overview {
   margin-top: 24px;
 }
+.issue-conclusion {
+  margin-bottom: 30px;
+  padding: 20px 22px;
+  border: 1px solid #e4ab9a;
+  border-left: 5px solid #bd5e46;
+  border-radius: 12px;
+  background: #fff7f4;
+}
+.issue-conclusion.none {
+  border-color: #a9ccb3;
+  border-left-color: #4f8a60;
+  background: #f5faf6;
+}
+.issue-conclusion.unknown {
+  border-color: #dfc797;
+  border-left-color: #b18436;
+  background: #fffaf0;
+}
+.issue-conclusion-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #a55340;
+  font-size: 11px;
+  font-weight: 650;
+  letter-spacing: 0.08em;
+}
+.issue-conclusion.none .issue-conclusion-label {
+  color: #3f7850;
+}
+.issue-conclusion-title {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 9px;
+}
+.issue-conclusion-title h2 {
+  color: #6f3022;
+  font-size: 21px;
+  line-height: 1.45;
+}
+.issue-conclusion.none .issue-conclusion-title h2 {
+  color: #285f39;
+}
+.issue-conclusion-title span {
+  flex-shrink: 0;
+  padding: 6px 9px;
+  border-radius: 999px;
+  background: rgb(255 255 255 / 75%);
+  color: #805247;
+  font-size: 10px;
+}
+.issue-conclusion p {
+  margin: 11px 0 8px;
+  color: #654d47;
+  font-size: 13px;
+  line-height: 1.75;
+}
+.issue-conclusion > strong {
+  display: block;
+  color: #8c4231;
+  font-size: 12px;
+  line-height: 1.7;
+}
+.issue-conclusion.none p,
+.issue-conclusion.none > strong {
+  color: #41634a;
+}
 .journey-title,
 .journey-stage > header,
 .journey-node-heading {
@@ -384,6 +453,117 @@ textarea::placeholder {
   align-items: center;
   gap: 5px;
 }
+.journey-route-panel {
+  margin: 18px 0;
+  padding: 15px;
+  border: 1px solid #e7e7e7;
+  border-radius: 12px;
+  background: #fbfbfb;
+}
+.journey-route-heading {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 14px;
+}
+.journey-route-heading strong {
+  font-size: 12px;
+}
+.journey-route-heading span {
+  color: #999;
+  font-size: 10px;
+}
+.journey-route-scroll {
+  overflow-x: auto;
+  padding-bottom: 3px;
+}
+.journey-route-map {
+  display: grid;
+  grid-template-columns: 36px minmax(105px, 1fr) minmax(90px, 0.75fr) minmax(105px, 1fr) minmax(90px, 0.75fr) minmax(105px, 1fr);
+  align-items: center;
+  gap: 6px;
+  min-width: 620px;
+}
+.route-lane-label {
+  color: #777;
+  font-size: 10px;
+  font-weight: 650;
+  text-align: center;
+}
+.route-lane-label.response {
+  margin-top: 7px;
+}
+.route-stop {
+  min-width: 0;
+  padding: 10px 9px;
+  overflow: hidden;
+  border: 1px solid #dedede;
+  border-radius: 8px;
+  background: #fff;
+  color: #555;
+  font-size: 11px;
+  font-weight: 600;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.route-stop.response {
+  margin-top: 7px;
+  background: #f8f8f8;
+}
+.route-connector {
+  min-width: 0;
+  color: #999;
+  text-align: center;
+}
+.route-connector > span,
+.route-connector > small {
+  display: block;
+  overflow: hidden;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.route-connector > div {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin: 3px 0;
+}
+.route-connector.left > div {
+  flex-direction: row-reverse;
+}
+.route-connector i {
+  display: block;
+  flex: 1;
+  height: 2px;
+  background: currentColor;
+}
+.route-connector svg {
+  flex-shrink: 0;
+  margin-left: -3px;
+}
+.route-connector.left svg {
+  margin-right: -3px;
+  margin-left: 0;
+}
+.route-connector > small {
+  color: currentColor;
+  font-weight: 650;
+}
+.route-connector.success {
+  color: #4f8a60;
+}
+.route-connector.failed {
+  color: #bd5139;
+}
+.route-connector.affected {
+  color: #b87a2d;
+}
+.route-connector.warning {
+  color: #b18436;
+}
 .journey-stages {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
@@ -410,6 +590,15 @@ textarea::placeholder {
 .journey-stage.failed {
   border-color: #df9d89;
   box-shadow: 0 0 0 2px #fff3ef inset;
+}
+.journey-stage.success {
+  border-color: #b8d4c0;
+  box-shadow: 0 0 0 2px #f3faf5 inset;
+}
+.journey-stage.affected,
+.journey-stage.warning {
+  border-color: #dfc99d;
+  box-shadow: 0 0 0 2px #fffaf0 inset;
 }
 .journey-stage > header {
   padding-bottom: 12px;
@@ -1232,10 +1421,16 @@ li + li {
     grid-template-columns: 1fr;
     gap: 25px;
   }
-  .journey-arrow {
-    top: -22px;
-    left: 50%;
-    transform: translateX(-50%) rotate(90deg);
+  .issue-conclusion {
+    padding: 17px;
+  }
+  .issue-conclusion-title,
+  .journey-route-heading {
+    align-items: flex-start;
+    flex-direction: column;
+  }
+  .issue-conclusion-title h2 {
+    font-size: 18px;
   }
   .journey-title {
     align-items: center;
