@@ -6,6 +6,7 @@ from functools import partial
 from langgraph.graph import END, START, StateGraph
 
 from troubleshooter.domain.models import InvestigationRequest
+from troubleshooter.observability.logging import log_event
 from troubleshooter.reports.builder import build_report
 from troubleshooter.skills import Skill
 from troubleshooter.skills.execution import execute_code_skill
@@ -42,8 +43,17 @@ def build_graph(
         warnings, notes = list(state["warnings"]), list(state["notes"])
         if not state["events"]:
             warnings.append("指定范围内没有可确认归属的日志，无法判断交易成功或失败")
+        chunks = prepare_chunks(state, request, config, budget)
+        log_event(
+            "evidence.prepared",
+            event_count=len(state["events"]),
+            before_chars=budget.usage.before_chars,
+            after_chars=budget.usage.after_chars,
+            chunk_count=len(chunks),
+            cleaning_enabled=request.cleaning_enabled,
+        )
         return {
-            "chunks": prepare_chunks(state, request, config, budget),
+            "chunks": chunks,
             "warnings": warnings,
             "notes": notes,
         }

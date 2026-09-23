@@ -206,12 +206,17 @@ def model_evidence(
             {"event_id": e.id, "normalized": e.model_dump(), "record": records[e.id]}
             for e in events
         ]
-    # Only share identical payloads. Every occurrence keeps its own identity and time.
+    # Splunk 来源位置只用于证据回查，对模型判断交易问题没有帮助。原始值仍完整保存在
+    # PostgreSQL，不会因为模型输入清洗而丢失。
+    #
+    # 同一交易的大部分日志会重复携带整组 trace IDs。只保留第一份并建立证据引用，
+    # 每个事件自己的时间、服务、类型和消息仍独立保留。
     payloads: dict[tuple[str, str], str] = {}
     output = []
     for event in events:
         item = clean_event(event, config)
-        for key in ("request", "response", "exception"):
+        item.pop("source", None)
+        for key in ("ids", "request", "response", "exception"):
             if key not in item:
                 continue
             fingerprint = (
